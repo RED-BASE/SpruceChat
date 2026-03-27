@@ -8,7 +8,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/sprucechat-builder-a30
+  IMAGE: ghcr.io/sundownersport/sprucechat-builder-a30
 
 jobs:
   build:
