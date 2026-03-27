@@ -1,0 +1,15 @@
+FROM ubuntu:20.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Basic build tools + aarch64 cross-compiler
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake pkg-config git ca-certificates wget ccache \
+    gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY build-universal.sh /build-universal.sh
+RUN chmod +x /build-universal.sh
+
+WORKDIR /build
+ENTRYPOINT ["/build-universal.sh"]

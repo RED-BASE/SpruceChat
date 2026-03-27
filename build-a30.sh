@@ -32,26 +32,26 @@ cmake -B build \
 cmake --build build --target llama-server llama-cli -j$(nproc)
 
 # Collect output
-mkdir -p "$OUTPUT_DIR/lib"
+mkdir -p "$OUTPUT_DIR/lib32"
 
-# Binaries
-cp build/bin/llama-server "$OUTPUT_DIR/"
-cp build/bin/llama-cli "$OUTPUT_DIR/"
-/opt/a30/bin/arm-a30-linux-gnueabihf-strip "$OUTPUT_DIR/llama-server" "$OUTPUT_DIR/llama-cli"
+# Binaries (named *32 for multi-arch app layout)
+cp build/bin/llama-server "$OUTPUT_DIR/llama-server32"
+cp build/bin/llama-cli "$OUTPUT_DIR/llama-cli32"
+/opt/a30/bin/arm-a30-linux-gnueabihf-strip "$OUTPUT_DIR/llama-server32" "$OUTPUT_DIR/llama-cli32"
 
 # llama.cpp shared libs
 for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libmtmd.so.0; do
     real=$(find build/bin -name "${soname}*" ! -type l | head -1)
     if [ -n "$real" ]; then
-        cp "$real" "$OUTPUT_DIR/lib/$soname"
+        cp "$real" "$OUTPUT_DIR/lib32/$soname"
     fi
 done
 
 # glibc 2.23 from A30 sysroot
 for lib in ld-linux-armhf.so.3 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1 libgcc_s.so.1; do
-    cp "$SYSROOT/lib/$lib" "$OUTPUT_DIR/lib/$lib" 2>/dev/null || true
+    cp "$SYSROOT/lib/$lib" "$OUTPUT_DIR/lib32/$lib" 2>/dev/null || true
 done
 
-chmod +x "$OUTPUT_DIR/llama-server" "$OUTPUT_DIR/llama-cli" "$OUTPUT_DIR/lib/ld-linux-armhf.so.3"
+chmod +x "$OUTPUT_DIR/llama-server32" "$OUTPUT_DIR/llama-cli32" "$OUTPUT_DIR/lib32/ld-linux-armhf.so.3"
 
 echo "=== Build complete ==="

@@ -5,15 +5,24 @@ APP_DIR="/mnt/SDCARD/App/SpruceChat"
 export HOME="$APP_DIR"
 cd "$APP_DIR"
 
-export LD_LIBRARY_PATH="$APP_DIR:/mnt/SDCARD/spruce/a30/lib:/mnt/SDCARD/miyoo/lib:$LD_LIBRARY_PATH"
-export PYSDL2_DLL_PATH="/mnt/SDCARD/spruce/a30/sdl2"
+# Platform-specific binary and library selection
+if [ "$PLATFORM" = "A30" ]; then
+    SERVER_BIN="$APP_DIR/llama-server32"
+    LIB_DIR="$APP_DIR/lib32"
+    LOADER="$APP_DIR/lib32/ld-linux-armhf.so.3"
+    export LD_LIBRARY_PATH="$APP_DIR/lib32:/mnt/SDCARD/spruce/a30/lib:/mnt/SDCARD/miyoo/lib:$LD_LIBRARY_PATH"
+    export PYSDL2_DLL_PATH="/mnt/SDCARD/spruce/a30/sdl2"
+else
+    SERVER_BIN="$APP_DIR/llama-server"
+    LIB_DIR="$APP_DIR/lib"
+    LOADER=""
+    export LD_LIBRARY_PATH="$APP_DIR/lib:/mnt/SDCARD/spruce/bin64:$LD_LIBRARY_PATH"
+    export PYSDL2_DLL_PATH="/mnt/SDCARD/spruce/bin64"
+fi
 
-# Ensure loopback is up (some A30 builds don't configure it)
+# Ensure loopback is up (some builds don't configure it)
 ifconfig lo 127.0.0.1 up 2>/dev/null
 
-SERVER_BIN="$APP_DIR/llama-server"
-LOADER="$APP_DIR/lib/ld-linux-armhf.so.3"
-LIB_DIR="$APP_DIR/lib"
 MODEL_Q4="$APP_DIR/models/qwen2.5-0.5b-instruct-q4_0.gguf"
 MODEL_Q2="$APP_DIR/models/qwen2.5-0.5b-instruct-q2_k.gguf"
 PORT=8086
@@ -25,19 +34,34 @@ else
     MODEL="$MODEL_Q2"
 fi
 
-# Start persistent llama-server using bundled glibc (device glibc is too old)
+# Start persistent llama-server
 SERVER_PID=""
-if [ -x "$LOADER" ] && [ -x "$SERVER_BIN" ] && [ -f "$MODEL" ]; then
-    "$LOADER" --library-path "$LIB_DIR" "$SERVER_BIN" \
-        -m "$MODEL" \
-        -c 1024 \
-        -t 4 \
-        -np 1 \
-        -ngl 0 \
-        -b 32 \
-        --port "$PORT" \
-        --host 0.0.0.0 \
-        > "$APP_DIR/server.log" 2>&1 &
+if [ -x "$SERVER_BIN" ] && [ -f "$MODEL" ]; then
+    if [ -n "$LOADER" ]; then
+        # A30: use bundled glibc loader (device glibc is too old)
+        "$LOADER" --library-path "$LIB_DIR" "$SERVER_BIN" \
+            -m "$MODEL" \
+            -c 1024 \
+            -t 4 \
+            -np 1 \
+            -ngl 0 \
+            -b 32 \
+            --port "$PORT" \
+            --host 0.0.0.0 \
+            > "$APP_DIR/server.log" 2>&1 &
+    else
+        # 64-bit: run directly with system glibc
+        "$SERVER_BIN" \
+            -m "$MODEL" \
+            -c 1024 \
+            -t 4 \
+            -np 1 \
+            -ngl 0 \
+            -b 32 \
+            --port "$PORT" \
+            --host 0.0.0.0 \
+            > "$APP_DIR/server.log" 2>&1 &
+    fi
     SERVER_PID=$!
     # Don't wait here — chat.py shows a loading screen while server starts
 fi
