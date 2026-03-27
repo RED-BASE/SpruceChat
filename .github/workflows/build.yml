@@ -3,99 +3,77 @@ name: Build
 on:
   workflow_dispatch:
 
+permissions:
+  contents: write
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/sprucechat-builder-a30
+
 jobs:
   build:
-    runs-on: ubuntu-24.04
-    container: debian:bookworm-slim
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Install dependencies
+      - uses: actions/checkout@v4
+
+      - name: Ensure latest release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          apt-get update
-          apt-get install -y git cmake make gcc-arm-linux-gnueabihf g++-arm-linux-gnueabihf ccache zip curl
+          gh release view latest >/dev/null 2>&1 || \
+            gh release create latest \
+              --target "${{ github.ref_name }}" \
+              --title "Latest Build" \
+              --notes "Most recent SpruceChat build. Updated automatically." \
+            || true
 
-      - name: Checkout SpruceChat
-        uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Clone llama.cpp
-        run: git clone --depth 1 https://github.com/ggerganov/llama.cpp.git /tmp/llama.cpp
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.a30
+          push: true
+          tags: ${{ env.IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.IMAGE }}:cache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:cache,mode=max
 
       - name: Restore ccache
         uses: actions/cache@v4
         with:
-          path: ~/.ccache
-          key: ccache-arm-${{ hashFiles('/tmp/llama.cpp/.git/HEAD') }}
-          restore-keys: ccache-arm-
+          path: ccache
+          key: ccache-a30-${{ github.sha }}
+          restore-keys: ccache-a30-
 
-      - name: Cross-compile for ARMv7 NEON
-        working-directory: /tmp/llama.cpp
+      - name: Build llama.cpp
         run: |
-          cat > arm32-toolchain.cmake <<'EOF'
-          set(CMAKE_SYSTEM_NAME Linux)
-          set(CMAKE_SYSTEM_PROCESSOR arm)
-          set(CMAKE_C_COMPILER_LAUNCHER ccache)
-          set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
-          set(CMAKE_C_COMPILER arm-linux-gnueabihf-gcc)
-          set(CMAKE_CXX_COMPILER arm-linux-gnueabihf-g++)
-          set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
-          set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
-          set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
-          set(CMAKE_C_FLAGS "-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -O2")
-          set(CMAKE_CXX_FLAGS "-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -O2")
-          EOF
-
-          ccache -z
-          cmake -B build \
-            -DCMAKE_TOOLCHAIN_FILE=arm32-toolchain.cmake \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_NATIVE=OFF \
-            -DLLAMA_CURL=OFF \
-            -DGGML_OPENMP=OFF
-
-          cmake --build build --target llama-server llama-cli -j$(nproc)
-          ccache -s
-
-      - name: Collect binaries and libraries
-        run: |
-          # Binaries
-          cp /tmp/llama.cpp/build/bin/llama-server llama-server
-          cp /tmp/llama.cpp/build/bin/llama-cli llama-cli
-          chmod +x llama-server llama-cli
-
-          # llama.cpp shared libs
-          mkdir -p lib
-          for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libmtmd.so.0; do
-            real=$(find /tmp/llama.cpp/build/bin -name "${soname}*" ! -type l | head -1)
-            if [ -n "$real" ]; then
-              cp "$real" "lib/$soname"
-            fi
-          done
-
-          # ARM glibc from cross-compiler sysroot (Bookworm = glibc 2.36)
-          SYSROOT=/usr/arm-linux-gnueabihf/lib
-          for lib in ld-linux-armhf.so.3 libc.so.6 libm.so.6 libpthread.so.0 libdl.so.2 librt.so.1 libgcc_s.so.1; do
-            cp "$SYSROOT/$lib" "lib/$lib" 2>/dev/null || true
-          done
-          # libstdc++ may be a symlink
-          real=$(readlink -f "$SYSROOT/libstdc++.so.6")
-          cp "$real" lib/libstdc++.so.6
-
-          chmod +x lib/ld-linux-armhf.so.3
+          mkdir -p output ccache
+          docker run --rm \
+            -v ${{ github.workspace }}/output:/output \
+            -v ${{ github.workspace }}/ccache:/ccache \
+            ${{ env.IMAGE }}:latest
 
       - name: Download model from models release
-        run: |
-          curl -sL "https://github.com/cli/cli/releases/download/v2.67.0/gh_2.67.0_linux_amd64.deb" -o /tmp/gh.deb
-          dpkg -i /tmp/gh.deb
-          gh release download models -p "qwen2.5-0.5b-instruct-q4_0.gguf" -D models
         env:
           GH_TOKEN: ${{ github.token }}
+        run: gh release download models -p "qwen2.5-0.5b-instruct-q4_0.gguf" -D output/models
 
       - name: Package release zip
         run: |
           mkdir -p SpruceChat/models SpruceChat/lib
-          cp llama-server llama-cli SpruceChat/
-          cp -r lib/* SpruceChat/lib/
-          cp models/*.gguf SpruceChat/models/
+          cp output/llama-server output/llama-cli SpruceChat/
+          cp output/lib/* SpruceChat/lib/
+          cp output/models/*.gguf SpruceChat/models/
           cp chat.py config.json icon.png launch.sh README.md SpruceChat/
           zip -r SpruceChat.zip SpruceChat/
 
@@ -105,19 +83,7 @@ jobs:
           name: SpruceChat
           path: SpruceChat.zip
 
-  release:
-    needs: build
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: SpruceChat
-
       - name: Update latest release
-        run: gh release upload latest SpruceChat.zip --clobber -R ${{ github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
+        run: gh release upload latest SpruceChat.zip --clobber
