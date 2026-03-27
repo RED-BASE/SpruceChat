@@ -1,0 +1,7 @@
+{
+  "label": "SpruceChat",
+  "icon": "icon.png",
+  "launch": "launch.sh",
+  "description": "Chat with a local AI on your handheld",
+  "devices": ["MIYOO_A30"]
+}
