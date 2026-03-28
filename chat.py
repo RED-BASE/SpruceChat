@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SpruceChat - A local AI chat app for Miyoo A30 running on spruceOS"""
+"""SpruceChat - A local AI chat app for spruceOS"""
 
 import http.client
 import json
@@ -14,7 +14,15 @@ import sdl2.sdlttf
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-SCREEN_W, SCREEN_H = 640, 480
+SCREEN_W = int(os.environ.get("SCREEN_WIDTH", 640))
+SCREEN_H = int(os.environ.get("SCREEN_HEIGHT", 480))
+SCREEN_ROTATION = int(os.environ.get("SCREEN_ROTATION", 0))
+# Scale factor relative to 640x480 base resolution
+S = SCREEN_W / 640.0
+def s(v):
+    """Scale a pixel value from 640x480 base to actual resolution."""
+    return int(v * S)
+
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_PATH = "/mnt/SDCARD/Themes/SPRUCE/nunwen.ttf"
 FONT_PATH_FB = "/mnt/SDCARD/App/PixelReader/resources/fonts/DejaVuSans.ttf"
@@ -45,18 +53,40 @@ KEY_TXT  = (180, 180, 195, 255)
 INPUT_BG = (26, 26, 38, 255)
 ACCENT   = (75, 130, 230, 255)
 
-# Input
+# Input — read device path and key codes from platform cfg env vars
 EVENT_FMT = 'llHHI'
 EVENT_SZ = struct.calcsize(EVENT_FMT)
-INPUT_DEV = "/dev/input/event3"
-KEY_A, KEY_B, KEY_X, KEY_Y = 57, 29, 42, 56
-KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT = 103, 108, 105, 106
-KEY_L1, KEY_R1, KEY_START, KEY_SELECT, KEY_MENU = 15, 14, 28, 97, 1
-EV_KEY, KEY_PRESS = 1, 1
+INPUT_DEV = os.environ.get("EVENT_PATH_READ_INPUTS_SPRUCE", "/dev/input/event3")
+EV_KEY, EV_ABS = 1, 3
+
+def _parse_btn(env_name, fallback_type, fallback_code, fallback_val=None):
+    """Parse platform cfg button format: 'type code [value]'"""
+    raw = os.environ.get(env_name, "")
+    if raw:
+        parts = raw.split()
+        t = int(parts[0])
+        c = int(parts[1])
+        v = int(parts[2]) if len(parts) > 2 else None
+        return (t, c, v)
+    return (fallback_type, fallback_code, fallback_val)
+
+BTN_A = _parse_btn("B_A", 1, 57)
+BTN_B = _parse_btn("B_B", 1, 29)
+BTN_X = _parse_btn("B_X", 1, 42)
+BTN_Y = _parse_btn("B_Y", 1, 56)
+BTN_UP = _parse_btn("B_UP", 1, 103, 1)
+BTN_DOWN = _parse_btn("B_DOWN", 1, 108, 1)
+BTN_LEFT = _parse_btn("B_LEFT", 1, 105, 1)
+BTN_RIGHT = _parse_btn("B_RIGHT", 1, 106, 1)
+BTN_L1 = _parse_btn("B_L1", 1, 15)
+BTN_R1 = _parse_btn("B_R1", 1, 14)
+BTN_START = _parse_btn("B_START", 1, 28)
+BTN_SELECT = _parse_btn("B_SELECT", 1, 97)
+BTN_MENU = _parse_btn("B_MENU", 1, 1)
 
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": "You are SpruceChat, a tiny AI on a Miyoo A30 handheld. 0.5B parameters of pure spruce energy. Keep responses short. You're on a tiny chip and that's part of the charm."
+    "content": "You are SpruceChat, a tiny spruce AI. 0.5B parameters of pure spruce energy. Keep responses short. You're on a tiny chip and that's part of the charm."
 }
 
 # ── Store ─────────────────────────────────────────────────────────────────────
@@ -108,6 +138,22 @@ class Input:
         self.lock = threading.Lock()
         self.running = True
         self.fd = None
+        # Build lookup tables for button matching
+        self._key_map = {}  # (type, code, value) -> button name for EV_KEY
+        self._abs_map = {}  # (code, sign) -> button name for EV_ABS
+        for name, btn in [
+            ("A", BTN_A), ("B", BTN_B), ("X", BTN_X), ("Y", BTN_Y),
+            ("UP", BTN_UP), ("DOWN", BTN_DOWN), ("LEFT", BTN_LEFT), ("RIGHT", BTN_RIGHT),
+            ("L1", BTN_L1), ("R1", BTN_R1),
+            ("START", BTN_START), ("SELECT", BTN_SELECT), ("MENU", BTN_MENU),
+        ]:
+            t, c, v = btn
+            if t == EV_KEY:
+                self._key_map[c] = name
+            elif t == EV_ABS:
+                # v encodes direction: negative = one dir, positive = other
+                sign = -1 if v is not None and v < 0 else 1
+                self._abs_map[(c, sign)] = name
         try:
             self.fd = os.open(INPUT_DEV, os.O_RDONLY | os.O_NONBLOCK)
         except OSError:
@@ -123,9 +169,17 @@ class Input:
                 data = os.read(self.fd, EVENT_SZ)
                 if len(data) == EVENT_SZ:
                     _, _, t, c, v = struct.unpack(EVENT_FMT, data)
-                    if t == EV_KEY and v == KEY_PRESS:
+                    btn = None
+                    if t == EV_KEY and v == 1:
+                        btn = self._key_map.get(c)
+                    elif t == EV_ABS:
+                        sv = struct.unpack('i', struct.pack('I', v))[0]
+                        if sv != 0:
+                            sign = -1 if sv < 0 else 1
+                            btn = self._abs_map.get((c, sign))
+                    if btn:
                         with self.lock:
-                            self.events.append(c)
+                            self.events.append(btn)
             except BlockingIOError:
                 time.sleep(0.016)
             except OSError:
@@ -148,25 +202,30 @@ class Gfx:
     def __init__(self):
         sdl2.ext.init(controller=False)
         sdl2.sdlttf.TTF_Init()
-        self.win = sdl2.ext.Window("SpruceChat", size=(SCREEN_H, SCREEN_W),
+        self.rotated = SCREEN_ROTATION == 270
+        if self.rotated:
+            win_size = (SCREEN_H, SCREEN_W)
+        else:
+            win_size = (SCREEN_W, SCREEN_H)
+        self.win = sdl2.ext.Window("SpruceChat", size=win_size,
                                     flags=sdl2.SDL_WINDOW_FULLSCREEN)
         self.win.show()
         sdl2.SDL_SetHint(sdl2.SDL_HINT_RENDER_SCALE_QUALITY, b"1")
         self.ren = sdl2.ext.Renderer(self.win, flags=sdl2.SDL_RENDERER_ACCELERATED)
         self.r = self.ren.sdlrenderer
 
-        # Offscreen canvas
+        # Offscreen canvas (always renders at SCREEN_W x SCREEN_H)
         self.canvas = sdl2.SDL_CreateTexture(self.r, sdl2.SDL_PIXELFORMAT_ARGB8888,
                                               sdl2.SDL_TEXTUREACCESS_TARGET, SCREEN_W, SCREEN_H)
-        # Cached rotation texture (reused every frame)
-        self.rot_tex = sdl2.SDL_CreateTexture(self.r, sdl2.SDL_PIXELFORMAT_ARGB8888,
-                                               sdl2.SDL_TEXTUREACCESS_TARGET, SCREEN_H, SCREEN_W)
+        if self.rotated:
+            self.rot_tex = sdl2.SDL_CreateTexture(self.r, sdl2.SDL_PIXELFORMAT_ARGB8888,
+                                                   sdl2.SDL_TEXTUREACCESS_TARGET, SCREEN_H, SCREEN_W)
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
 
         fp = FONT_PATH if os.path.exists(FONT_PATH) else FONT_PATH_FB
-        self.f_sm = sdl2.sdlttf.TTF_OpenFont(fp.encode(), 16)
-        self.f_md = sdl2.sdlttf.TTF_OpenFont(fp.encode(), 20)
-        self.f_lg = sdl2.sdlttf.TTF_OpenFont(fp.encode(), 26)
+        self.f_sm = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(16))
+        self.f_md = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(20))
+        self.f_lg = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(26))
 
     def clear(self, c=BG):
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
@@ -174,17 +233,21 @@ class Gfx:
         sdl2.SDL_RenderClear(self.r)
 
     def present(self):
-        # Rotate canvas into cached texture
-        sdl2.SDL_SetRenderTarget(self.r, self.rot_tex)
-        sdl2.SDL_SetRenderDrawColor(self.r, 0, 0, 0, 255)
-        sdl2.SDL_RenderClear(self.r)
-        dst = sdl2.SDL_Rect((SCREEN_H - SCREEN_W) // 2, (SCREEN_W - SCREEN_H) // 2,
-                             SCREEN_W, SCREEN_H)
-        ctr = sdl2.SDL_Point(SCREEN_W // 2, SCREEN_H // 2)
-        sdl2.SDL_RenderCopyEx(self.r, self.canvas, None, dst, 270, ctr, sdl2.SDL_FLIP_NONE)
-        # Blit to screen
-        sdl2.SDL_SetRenderTarget(self.r, None)
-        sdl2.SDL_RenderCopy(self.r, self.rot_tex, None, None)
+        if self.rotated:
+            # Rotate canvas into cached texture (A30: 270°)
+            sdl2.SDL_SetRenderTarget(self.r, self.rot_tex)
+            sdl2.SDL_SetRenderDrawColor(self.r, 0, 0, 0, 255)
+            sdl2.SDL_RenderClear(self.r)
+            dst = sdl2.SDL_Rect((SCREEN_H - SCREEN_W) // 2, (SCREEN_W - SCREEN_H) // 2,
+                                 SCREEN_W, SCREEN_H)
+            ctr = sdl2.SDL_Point(SCREEN_W // 2, SCREEN_H // 2)
+            sdl2.SDL_RenderCopyEx(self.r, self.canvas, None, dst, 270, ctr, sdl2.SDL_FLIP_NONE)
+            sdl2.SDL_SetRenderTarget(self.r, None)
+            sdl2.SDL_RenderCopy(self.r, self.rot_tex, None, None)
+        else:
+            # No rotation — blit canvas directly
+            sdl2.SDL_SetRenderTarget(self.r, None)
+            sdl2.SDL_RenderCopy(self.r, self.canvas, None, None)
         sdl2.SDL_RenderPresent(self.r)
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
 
@@ -211,7 +274,8 @@ class Gfx:
         return w, h
 
     def destroy(self):
-        sdl2.SDL_DestroyTexture(self.rot_tex)
+        if self.rotated:
+            sdl2.SDL_DestroyTexture(self.rot_tex)
         sdl2.SDL_DestroyTexture(self.canvas)
         for f in [self.f_sm, self.f_md, self.f_lg]:
             if f:
@@ -231,7 +295,7 @@ KB_ROWS = [
 class Keyboard:
     def __init__(self):
         self.row, self.col, self.shifted = 2, 4, False
-        self.y0 = SCREEN_H - 180
+        self.y0 = SCREEN_H - s(180)
 
     @property
     def rows(self):
@@ -261,22 +325,22 @@ class Keyboard:
     def draw(self, g):
         rows = self.rows
         g.rect(0, self.y0, SCREEN_W, SCREEN_H - self.y0, BG)
-        g.rect(16, self.y0, SCREEN_W - 32, 1, LINE)
+        g.rect(s(16), self.y0, SCREEN_W - s(32), 1, LINE)
         g.text("A:type  B:back  Y:send  X:spc  L1:shift  R1:del",
-               16, self.y0 + 4, font=g.f_sm, color=C_DIM)
-        ky = self.y0 + 22
+               s(16), self.y0 + s(4), font=g.f_sm, color=C_DIM)
+        ky = self.y0 + s(22)
         for ri, row in enumerate(rows):
             bottom = ri == len(rows) - 1
-            kw = 80 if bottom else 42
-            gap = 3
+            kw = s(80) if bottom else s(42)
+            gap = s(3)
             tw = len(row) * kw + (len(row) - 1) * gap
             sx = (SCREEN_W - tw) // 2
             for ci, key in enumerate(row):
                 x = sx + ci * (kw + gap)
-                y = ky + ri * 31
+                y = ky + ri * s(31)
                 sel = ri == self.row and ci == self.col
-                g.rect(x, y, kw, 28, KEY_SEL if sel else KEY_BG)
-                g.text(key, x + kw // 2 - len(key) * 4, y + 5,
+                g.rect(x, y, kw, s(28), KEY_SEL if sel else KEY_BG)
+                g.text(key, x + kw // 2 - len(key) * s(4), y + s(5),
                        font=g.f_sm, color=(255, 255, 255, 255) if sel else KEY_TXT)
 
 # ── AI Engine ─────────────────────────────────────────────────────────────────
@@ -394,7 +458,7 @@ class App:
         if not self.ai.ok:
             self.msgs.append(("ai", "[Server not connected. Restart the app to retry.]"))
         elif not self.msgs:
-            self.msgs.append(("ai", "Hey! I'm a tiny AI on your Miyoo. What's up?"))
+            self.msgs.append(("ai", "Hey! I'm a tiny spruce AI. What's up?"))
 
     def _boot(self):
         start = time.time()
@@ -407,7 +471,7 @@ class App:
         while self.running:
             dt = time.time() - start
             for c in self.inp.get():
-                if c in (KEY_B, KEY_MENU):
+                if c in ("B", "MENU"):
                     self.running = False
                     return
 
@@ -470,38 +534,38 @@ class App:
 
     def _draw_boot(self, mfile, lines, progress, dt, ready):
         self.g.clear()
-        self.g.text("SpruceChat", SCREEN_W // 2 - 76, 20, font=self.g.f_lg, color=C_TEXT)
-        self.g.text(mfile, 24, 60, font=self.g.f_sm, color=C_DIM)
+        self.g.text("SpruceChat", SCREEN_W // 2 - s(76), s(20), font=self.g.f_lg, color=C_TEXT)
+        self.g.text(mfile, s(24), s(60), font=self.g.f_sm, color=C_DIM)
 
         spin = "|/-\\"[int(dt * 4) % 4]
         pct = int(progress * 100)
         st = "ready" if ready else f"{spin} loading {pct}%  {dt:.0f}s"
-        self.g.text(st, 24, 80, font=self.g.f_sm, color=C_AI if ready else C_DIM)
+        self.g.text(st, s(24), s(80), font=self.g.f_sm, color=C_AI if ready else C_DIM)
 
         # Progress bar
-        bw = SCREEN_W - 48
-        self.g.rect(24, 102, bw, 3, HEADER)
+        bw = SCREEN_W - s(48)
+        self.g.rect(s(24), s(102), bw, s(3), HEADER)
         fw = int(bw * min(progress, 1.0))
         if fw > 0:
-            self.g.rect(24, 102, fw, 3, C_AI if ready else ACCENT)
+            self.g.rect(s(24), s(102), fw, s(3), C_AI if ready else ACCENT)
 
         # Log
         vis = lines[-16:]
-        y = 116
+        y = s(116)
         for ln in vis:
             col = C_AI if ln.startswith("[OK]") else (70, 70, 90, 255)
-            self.g.text(ln, 20, y, font=self.g.f_sm, color=col)
-            y += 16
+            self.g.text(ln, s(20), y, font=self.g.f_sm, color=col)
+            y += s(16)
 
-        self.g.text("B: cancel", 16, SCREEN_H - 20, font=self.g.f_sm, color=C_DIM)
+        self.g.text("B: cancel", s(16), SCREEN_H - s(20), font=self.g.f_sm, color=C_DIM)
         self.g.present()
 
     def _input(self):
         for c in self.inp.get():
-            if c == KEY_MENU:
+            if c == "MENU":
                 self.ai.cancel(); self.running = False; return
             if self.ai.generating:
-                if c == KEY_B:
+                if c == "B":
                     self.ai.cancel(); self.running = False; return
                 continue
             if self.state == "keyboard":
@@ -510,33 +574,33 @@ class App:
                 self._chat_input(c)
 
     def _chat_input(self, c):
-        if c == KEY_A: self.state = "keyboard"
-        elif c == KEY_B: self.running = False
-        elif c == KEY_UP: self.scroll = max(0, self.scroll - 30)
-        elif c == KEY_DOWN: self.scroll = max(0, self.scroll + 30)
-        elif c == KEY_SELECT:
+        if c == "A": self.state = "keyboard"
+        elif c == "B": self.running = False
+        elif c == "UP": self.scroll = max(0, self.scroll - s(30))
+        elif c == "DOWN": self.scroll = max(0, self.scroll + s(30))
+        elif c == "SELECT":
             self.store.clear()
             self.msgs = [("ai", "Chat cleared.")]
             self.scroll = 0
 
     def _kb_input(self, c):
-        if c == KEY_UP: self.kb.move("up")
-        elif c == KEY_DOWN: self.kb.move("down")
-        elif c == KEY_LEFT: self.kb.move("left")
-        elif c == KEY_RIGHT: self.kb.move("right")
-        elif c == KEY_A:
+        if c == "UP": self.kb.move("up")
+        elif c == "DOWN": self.kb.move("down")
+        elif c == "LEFT": self.kb.move("left")
+        elif c == "RIGHT": self.kb.move("right")
+        elif c == "A":
             r = self.kb.press()
             if r == "BACKSPACE": self.text = self.text[:-1]
             elif r == "SEND": self._send()
             else: self.text += r
-        elif c == KEY_B:
+        elif c == "B":
             if self.text: self.text = self.text[:-1]
             else: self.state = "chat"
-        elif c == KEY_X: self.text += " "
-        elif c in (KEY_Y, KEY_START): self._send()
-        elif c == KEY_L1: self.kb.shifted = not self.kb.shifted
-        elif c == KEY_R1: self.text = self.text[:-1]
-        elif c == KEY_MENU: self.running = False
+        elif c == "X": self.text += " "
+        elif c in ("Y", "START"): self._send()
+        elif c == "L1": self.kb.shifted = not self.kb.shifted
+        elif c == "R1": self.text = self.text[:-1]
+        elif c == "MENU": self.running = False
 
     def _send(self):
         t = self.text.strip()
@@ -564,12 +628,13 @@ class App:
         self.scroll = max(0, self._total_h() - self._chat_h())
 
     def _chat_h(self):
-        return (self.kb.y0 - 76) if self.state == "keyboard" else (SCREEN_H - 36)
+        return (self.kb.y0 - s(76)) if self.state == "keyboard" else (SCREEN_H - s(36))
 
     def _total_h(self):
-        h = 8
+        h = s(8)
+        cpl = max(1, int(48 * S))
         for _, t in self.msgs:
-            h += max(1, len(t) // 48 + 1) * 22 + 20
+            h += max(1, len(t) // cpl + 1) * s(22) + s(20)
         return h
 
     def _draw(self):
@@ -577,29 +642,30 @@ class App:
         self.blink = (self.blink + 1) % 60
 
         # Header
-        self.g.rect(0, 0, SCREEN_W, 34, HEADER)
-        self.g.rect(0, 34, SCREEN_W, 1, LINE)
+        self.g.rect(0, 0, SCREEN_W, s(34), HEADER)
+        self.g.rect(0, s(34), SCREEN_W, 1, LINE)
 
         if self.ai.generating:
             dt = int(time.time() - self.t0) if self.t0 else 0
             sp = "|/-\\"[(self.blink // 4) % 4]
             if self.ai.response:
                 self.g.text(f"{sp} {self.ai.toks}tok {self.ai.tps:.1f}t/s {dt}s",
-                            14, 7, color=C_AI)
+                            s(14), s(7), color=C_AI)
             else:
-                self.g.text(f"{sp} thinking... {dt}s", 14, 7, color=C_DIM)
+                self.g.text(f"{sp} thinking... {dt}s", s(14), s(7), color=C_DIM)
         else:
-            self.g.text("SpruceChat", 14, 6, color=C_TEXT)
+            self.g.text("SpruceChat", s(14), s(6), color=C_TEXT)
             if self.state == "chat":
-                self.g.text("A:type  B:quit  SEL:clear", SCREEN_W - 220, 10, font=self.g.f_sm, color=C_DIM)
+                self.g.text("A:type  B:quit  SEL:clear", SCREEN_W - s(220), s(10), font=self.g.f_sm, color=C_DIM)
 
         # Chat area
-        top = 36
+        top = s(36)
         bot = self._chat_h() + top
         self.g.rect(0, top, SCREEN_W, bot - top, CHAT_BG)
 
-        y = top + 8 - self.scroll
-        mw = SCREEN_W - 40
+        y = top + s(8) - self.scroll
+        mw = SCREEN_W - s(40)
+        cpl = max(1, int(48 * S))
 
         for role, txt in self.msgs:
             if y > bot:
@@ -608,8 +674,8 @@ class App:
                 txt = "..."
 
             # Estimate height to skip offscreen
-            est = max(1, len(txt or " ") // 48 + 1) * 22 + 20
-            if y + est < top - 10:
+            est = max(1, len(txt or " ") // cpl + 1) * s(22) + s(20)
+            if y + est < top - s(10):
                 y += est
                 continue
 
@@ -618,21 +684,21 @@ class App:
 
             # Label
             lbl = "you" if role == "user" else "spruce"
-            self.g.text(lbl, 18, y, font=self.g.f_sm, color=C_DIM)
-            y += 15
+            self.g.text(lbl, s(18), y, font=self.g.f_sm, color=C_DIM)
+            y += s(15)
 
             # Bubble + text (render once, use height)
-            self.g.rect(14, y, SCREEN_W - 28, est - 18, bc)
-            _, th = self.g.text(txt or " ", 22, y + 4, color=tc, wrap=mw)
-            y += max(th + 8, est - 18) + 6
+            self.g.rect(s(14), y, SCREEN_W - s(28), est - s(18), bc)
+            _, th = self.g.text(txt or " ", s(22), y + s(4), color=tc, wrap=mw)
+            y += max(th + s(8), est - s(18)) + s(6)
 
         # Input bar
         if self.state == "keyboard":
-            iy = self.kb.y0 - 38
+            iy = self.kb.y0 - s(38)
             self.g.rect(0, iy, SCREEN_W, 1, LINE)
-            self.g.rect(0, iy + 1, SCREEN_W, 36, INPUT_BG)
+            self.g.rect(0, iy + 1, SCREEN_W, s(36), INPUT_BG)
             cur = "_" if self.blink < 30 else " "
-            self.g.text(self.text + cur, 16, iy + 8, color=C_TEXT)
+            self.g.text(self.text + cur, s(16), iy + s(8), color=C_TEXT)
             self.kb.draw(self.g)
 
         self.g.present()

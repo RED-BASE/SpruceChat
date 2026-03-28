@@ -3,5 +3,5 @@
   "icon": "icon.png",
   "launch": "launch.sh",
   "description": "Chat with a local AI on your handheld",
-  "devices": ["MIYOO_A30"]
+  "devices": ["MIYOO_A30", "TRIMUI_BRICK", "TRIMUI_SMART_PRO", "TRIMUI_SMART_PRO_S", "MIYOO_FLIP"]
 }

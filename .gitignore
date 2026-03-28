@@ -1,3 +1,10 @@
 models/*.gguf
 *.log
 chat_history.jsonl
+CLAUDE.md
+llama-server
+llama-server32
+llama-cli
+llama-cli32
+lib/
+lib32/
