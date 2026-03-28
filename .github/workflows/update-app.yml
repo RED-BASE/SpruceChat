@@ -1,0 +1,36 @@
+name: Update App Files
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download current release zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download latest -p "SpruceChat.zip" -D /tmp
+
+      - name: Replace app files
+        run: |
+          cd /tmp
+          unzip -o SpruceChat.zip
+          cp ${{ github.workspace }}/chat.py SpruceChat/
+          cp ${{ github.workspace }}/launch.sh SpruceChat/
+          cp ${{ github.workspace }}/config.json SpruceChat/
+          cp ${{ github.workspace }}/icon.png SpruceChat/
+          cp ${{ github.workspace }}/README.md SpruceChat/
+          rm SpruceChat.zip
+          zip -r SpruceChat.zip SpruceChat/
+
+      - name: Upload updated zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload latest /tmp/SpruceChat.zip --clobber
