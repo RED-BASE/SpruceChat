@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""SpruceChat - A local AI chat app for Miyoo A30 running on spruceOS"""
+"""SpruceChat - A local AI chat app for spruceOS"""
 
 import http.client
 import json
@@ -47,18 +47,40 @@ KEY_TXT  = (180, 180, 195, 255)
 INPUT_BG = (26, 26, 38, 255)
 ACCENT   = (75, 130, 230, 255)
 
-# Input
+# Input — read device path and key codes from platform cfg env vars
 EVENT_FMT = 'llHHI'
 EVENT_SZ = struct.calcsize(EVENT_FMT)
-INPUT_DEV = "/dev/input/event3"
-KEY_A, KEY_B, KEY_X, KEY_Y = 57, 29, 42, 56
-KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT = 103, 108, 105, 106
-KEY_L1, KEY_R1, KEY_START, KEY_SELECT, KEY_MENU = 15, 14, 28, 97, 1
-EV_KEY, KEY_PRESS = 1, 1
+INPUT_DEV = os.environ.get("EVENT_PATH_READ_INPUTS_SPRUCE", "/dev/input/event3")
+EV_KEY, EV_ABS = 1, 3
+
+def _parse_btn(env_name, fallback_type, fallback_code, fallback_val=None):
+    """Parse platform cfg button format: 'type code [value]'"""
+    raw = os.environ.get(env_name, "")
+    if raw:
+        parts = raw.split()
+        t = int(parts[0])
+        c = int(parts[1])
+        v = int(parts[2]) if len(parts) > 2 else None
+        return (t, c, v)
+    return (fallback_type, fallback_code, fallback_val)
+
+BTN_A = _parse_btn("B_A", 1, 57)
+BTN_B = _parse_btn("B_B", 1, 29)
+BTN_X = _parse_btn("B_X", 1, 42)
+BTN_Y = _parse_btn("B_Y", 1, 56)
+BTN_UP = _parse_btn("B_UP", 1, 103, 1)
+BTN_DOWN = _parse_btn("B_DOWN", 1, 108, 1)
+BTN_LEFT = _parse_btn("B_LEFT", 1, 105, 1)
+BTN_RIGHT = _parse_btn("B_RIGHT", 1, 106, 1)
+BTN_L1 = _parse_btn("B_L1", 1, 15)
+BTN_R1 = _parse_btn("B_R1", 1, 14)
+BTN_START = _parse_btn("B_START", 1, 28)
+BTN_SELECT = _parse_btn("B_SELECT", 1, 97)
+BTN_MENU = _parse_btn("B_MENU", 1, 1)
 
 SYSTEM_PROMPT = {
     "role": "system",
-    "content": "You are SpruceChat, a tiny AI on a Miyoo A30 handheld. 0.5B parameters of pure spruce energy. Keep responses short. You're on a tiny chip and that's part of the charm."
+    "content": "You are SpruceChat, a tiny spruce AI. 0.5B parameters of pure spruce energy. Keep responses short. You're on a tiny chip and that's part of the charm."
 }
 
 # ── Store ─────────────────────────────────────────────────────────────────────
@@ -110,6 +132,22 @@ class Input:
         self.lock = threading.Lock()
         self.running = True
         self.fd = None
+        # Build lookup tables for button matching
+        self._key_map = {}  # (type, code, value) -> button name for EV_KEY
+        self._abs_map = {}  # (code, sign) -> button name for EV_ABS
+        for name, btn in [
+            ("A", BTN_A), ("B", BTN_B), ("X", BTN_X), ("Y", BTN_Y),
+            ("UP", BTN_UP), ("DOWN", BTN_DOWN), ("LEFT", BTN_LEFT), ("RIGHT", BTN_RIGHT),
+            ("L1", BTN_L1), ("R1", BTN_R1),
+            ("START", BTN_START), ("SELECT", BTN_SELECT), ("MENU", BTN_MENU),
+        ]:
+            t, c, v = btn
+            if t == EV_KEY:
+                self._key_map[c] = name
+            elif t == EV_ABS:
+                # v encodes direction: negative = one dir, positive = other
+                sign = -1 if v is not None and v < 0 else 1
+                self._abs_map[(c, sign)] = name
         try:
             self.fd = os.open(INPUT_DEV, os.O_RDONLY | os.O_NONBLOCK)
         except OSError:
@@ -125,9 +163,17 @@ class Input:
                 data = os.read(self.fd, EVENT_SZ)
                 if len(data) == EVENT_SZ:
                     _, _, t, c, v = struct.unpack(EVENT_FMT, data)
-                    if t == EV_KEY and v == KEY_PRESS:
+                    btn = None
+                    if t == EV_KEY and v == 1:
+                        btn = self._key_map.get(c)
+                    elif t == EV_ABS:
+                        sv = struct.unpack('i', struct.pack('I', v))[0]
+                        if sv != 0:
+                            sign = -1 if sv < 0 else 1
+                            btn = self._abs_map.get((c, sign))
+                    if btn:
                         with self.lock:
-                            self.events.append(c)
+                            self.events.append(btn)
             except BlockingIOError:
                 time.sleep(0.016)
             except OSError:
@@ -406,7 +452,7 @@ class App:
         if not self.ai.ok:
             self.msgs.append(("ai", "[Server not connected. Restart the app to retry.]"))
         elif not self.msgs:
-            self.msgs.append(("ai", "Hey! I'm a tiny AI on your Miyoo. What's up?"))
+            self.msgs.append(("ai", "Hey! I'm a tiny spruce AI. What's up?"))
 
     def _boot(self):
         start = time.time()
@@ -419,7 +465,7 @@ class App:
         while self.running:
             dt = time.time() - start
             for c in self.inp.get():
-                if c in (KEY_B, KEY_MENU):
+                if c in ("B", "MENU"):
                     self.running = False
                     return
 
@@ -510,10 +556,10 @@ class App:
 
     def _input(self):
         for c in self.inp.get():
-            if c == KEY_MENU:
+            if c == "MENU":
                 self.ai.cancel(); self.running = False; return
             if self.ai.generating:
-                if c == KEY_B:
+                if c == "B":
                     self.ai.cancel(); self.running = False; return
                 continue
             if self.state == "keyboard":
@@ -522,33 +568,33 @@ class App:
                 self._chat_input(c)
 
     def _chat_input(self, c):
-        if c == KEY_A: self.state = "keyboard"
-        elif c == KEY_B: self.running = False
-        elif c == KEY_UP: self.scroll = max(0, self.scroll - 30)
-        elif c == KEY_DOWN: self.scroll = max(0, self.scroll + 30)
-        elif c == KEY_SELECT:
+        if c == "A": self.state = "keyboard"
+        elif c == "B": self.running = False
+        elif c == "UP": self.scroll = max(0, self.scroll - 30)
+        elif c == "DOWN": self.scroll = max(0, self.scroll + 30)
+        elif c == "SELECT":
             self.store.clear()
             self.msgs = [("ai", "Chat cleared.")]
             self.scroll = 0
 
     def _kb_input(self, c):
-        if c == KEY_UP: self.kb.move("up")
-        elif c == KEY_DOWN: self.kb.move("down")
-        elif c == KEY_LEFT: self.kb.move("left")
-        elif c == KEY_RIGHT: self.kb.move("right")
-        elif c == KEY_A:
+        if c == "UP": self.kb.move("up")
+        elif c == "DOWN": self.kb.move("down")
+        elif c == "LEFT": self.kb.move("left")
+        elif c == "RIGHT": self.kb.move("right")
+        elif c == "A":
             r = self.kb.press()
             if r == "BACKSPACE": self.text = self.text[:-1]
             elif r == "SEND": self._send()
             else: self.text += r
-        elif c == KEY_B:
+        elif c == "B":
             if self.text: self.text = self.text[:-1]
             else: self.state = "chat"
-        elif c == KEY_X: self.text += " "
-        elif c in (KEY_Y, KEY_START): self._send()
-        elif c == KEY_L1: self.kb.shifted = not self.kb.shifted
-        elif c == KEY_R1: self.text = self.text[:-1]
-        elif c == KEY_MENU: self.running = False
+        elif c == "X": self.text += " "
+        elif c in ("Y", "START"): self._send()
+        elif c == "L1": self.kb.shifted = not self.kb.shifted
+        elif c == "R1": self.text = self.text[:-1]
+        elif c == "MENU": self.running = False
 
     def _send(self):
         t = self.text.strip()

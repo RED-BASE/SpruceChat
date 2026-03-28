@@ -53,10 +53,9 @@ for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libm
     fi
 done
 
-# OpenSSL from cross-compiler sysroot (llama-server uses HTTPS)
-SYSROOT=/usr/aarch64-linux-gnu/lib
-for lib in libssl.so.3 libcrypto.so.3; do
-    real=$(find "$SYSROOT" /usr/lib/aarch64-linux-gnu -name "$lib*" ! -type l 2>/dev/null | head -1)
+# Runtime libs from cross-compiler sysroot (bundle what the device might lack)
+for lib in libssl.so.3 libcrypto.so.3 libatomic.so.1 libgcc_s.so.1; do
+    real=$(find /usr/aarch64-linux-gnu /usr/lib/aarch64-linux-gnu -name "$lib*" ! -type l 2>/dev/null | head -1)
     if [ -n "$real" ]; then
         cp "$real" "$OUTPUT_DIR/lib/$lib"
     fi
