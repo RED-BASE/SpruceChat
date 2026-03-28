@@ -11,7 +11,7 @@ jobs:
   a30:
     runs-on: ubuntu-latest
     env:
-      IMAGE: ghcr.io/sundownersport/sprucechat-builder-a30
+      IMAGE: ghcr.io/red-base/sprucechat-builder-a30
 
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +60,7 @@ jobs:
   universal:
     runs-on: ubuntu-latest
     env:
-      IMAGE: ghcr.io/sundownersport/sprucechat-builder-universal
+      IMAGE: ghcr.io/red-base/sprucechat-builder-universal
 
     steps:
       - uses: actions/checkout@v4

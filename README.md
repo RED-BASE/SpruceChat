@@ -25,7 +25,7 @@ The AI has the personality of a spruce tree. Patient. Unhurried. Quietly amazed 
 
 ## Quick start
 
-Download the [latest release](https://github.com/Sundownersport/SpruceChat/releases/tag/latest) — it includes everything (both architectures and the model). Unzip `SpruceChat/` to `/mnt/SDCARD/App/` on your SD card and launch from the Apps menu.
+Download the [latest release](https://github.com/RED-BASE/SpruceChat/releases/tag/latest) — it includes everything (both architectures and the model). Unzip `SpruceChat/` to `/mnt/SDCARD/App/` on your SD card and launch from the Apps menu.
 
 First boot takes about a minute while the model loads into RAM. After that, you're chatting.
 
