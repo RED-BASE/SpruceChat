@@ -17,6 +17,12 @@ import sdl2.sdlttf
 SCREEN_W = int(os.environ.get("SCREEN_WIDTH", 640))
 SCREEN_H = int(os.environ.get("SCREEN_HEIGHT", 480))
 SCREEN_ROTATION = int(os.environ.get("SCREEN_ROTATION", 0))
+# Scale factor relative to 640x480 base resolution
+S = SCREEN_W / 640.0
+def s(v):
+    """Scale a pixel value from 640x480 base to actual resolution."""
+    return int(v * S)
+
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 FONT_PATH = "/mnt/SDCARD/Themes/SPRUCE/nunwen.ttf"
 FONT_PATH_FB = "/mnt/SDCARD/App/PixelReader/resources/fonts/DejaVuSans.ttf"
@@ -217,9 +223,9 @@ class Gfx:
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
 
         fp = FONT_PATH if os.path.exists(FONT_PATH) else FONT_PATH_FB
-        self.f_sm = sdl2.sdlttf.TTF_OpenFont(fp.encode(), 16)
-        self.f_md = sdl2.sdlttf.TTF_OpenFont(fp.encode(), 20)
-        self.f_lg = sdl2.sdlttf.TTF_OpenFont(fp.encode(), 26)
+        self.f_sm = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(16))
+        self.f_md = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(20))
+        self.f_lg = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(26))
 
     def clear(self, c=BG):
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
@@ -289,7 +295,7 @@ KB_ROWS = [
 class Keyboard:
     def __init__(self):
         self.row, self.col, self.shifted = 2, 4, False
-        self.y0 = SCREEN_H - 180
+        self.y0 = SCREEN_H - s(180)
 
     @property
     def rows(self):
@@ -319,22 +325,22 @@ class Keyboard:
     def draw(self, g):
         rows = self.rows
         g.rect(0, self.y0, SCREEN_W, SCREEN_H - self.y0, BG)
-        g.rect(16, self.y0, SCREEN_W - 32, 1, LINE)
+        g.rect(s(16), self.y0, SCREEN_W - s(32), 1, LINE)
         g.text("A:type  B:back  Y:send  X:spc  L1:shift  R1:del",
-               16, self.y0 + 4, font=g.f_sm, color=C_DIM)
-        ky = self.y0 + 22
+               s(16), self.y0 + s(4), font=g.f_sm, color=C_DIM)
+        ky = self.y0 + s(22)
         for ri, row in enumerate(rows):
             bottom = ri == len(rows) - 1
-            kw = 80 if bottom else 42
-            gap = 3
+            kw = s(80) if bottom else s(42)
+            gap = s(3)
             tw = len(row) * kw + (len(row) - 1) * gap
             sx = (SCREEN_W - tw) // 2
             for ci, key in enumerate(row):
                 x = sx + ci * (kw + gap)
-                y = ky + ri * 31
+                y = ky + ri * s(31)
                 sel = ri == self.row and ci == self.col
-                g.rect(x, y, kw, 28, KEY_SEL if sel else KEY_BG)
-                g.text(key, x + kw // 2 - len(key) * 4, y + 5,
+                g.rect(x, y, kw, s(28), KEY_SEL if sel else KEY_BG)
+                g.text(key, x + kw // 2 - len(key) * s(4), y + s(5),
                        font=g.f_sm, color=(255, 255, 255, 255) if sel else KEY_TXT)
 
 # ── AI Engine ─────────────────────────────────────────────────────────────────
@@ -528,30 +534,30 @@ class App:
 
     def _draw_boot(self, mfile, lines, progress, dt, ready):
         self.g.clear()
-        self.g.text("SpruceChat", SCREEN_W // 2 - 76, 20, font=self.g.f_lg, color=C_TEXT)
-        self.g.text(mfile, 24, 60, font=self.g.f_sm, color=C_DIM)
+        self.g.text("SpruceChat", SCREEN_W // 2 - s(76), s(20), font=self.g.f_lg, color=C_TEXT)
+        self.g.text(mfile, s(24), s(60), font=self.g.f_sm, color=C_DIM)
 
         spin = "|/-\\"[int(dt * 4) % 4]
         pct = int(progress * 100)
         st = "ready" if ready else f"{spin} loading {pct}%  {dt:.0f}s"
-        self.g.text(st, 24, 80, font=self.g.f_sm, color=C_AI if ready else C_DIM)
+        self.g.text(st, s(24), s(80), font=self.g.f_sm, color=C_AI if ready else C_DIM)
 
         # Progress bar
-        bw = SCREEN_W - 48
-        self.g.rect(24, 102, bw, 3, HEADER)
+        bw = SCREEN_W - s(48)
+        self.g.rect(s(24), s(102), bw, s(3), HEADER)
         fw = int(bw * min(progress, 1.0))
         if fw > 0:
-            self.g.rect(24, 102, fw, 3, C_AI if ready else ACCENT)
+            self.g.rect(s(24), s(102), fw, s(3), C_AI if ready else ACCENT)
 
         # Log
         vis = lines[-16:]
-        y = 116
+        y = s(116)
         for ln in vis:
             col = C_AI if ln.startswith("[OK]") else (70, 70, 90, 255)
-            self.g.text(ln, 20, y, font=self.g.f_sm, color=col)
-            y += 16
+            self.g.text(ln, s(20), y, font=self.g.f_sm, color=col)
+            y += s(16)
 
-        self.g.text("B: cancel", 16, SCREEN_H - 20, font=self.g.f_sm, color=C_DIM)
+        self.g.text("B: cancel", s(16), SCREEN_H - s(20), font=self.g.f_sm, color=C_DIM)
         self.g.present()
 
     def _input(self):
@@ -570,8 +576,8 @@ class App:
     def _chat_input(self, c):
         if c == "A": self.state = "keyboard"
         elif c == "B": self.running = False
-        elif c == "UP": self.scroll = max(0, self.scroll - 30)
-        elif c == "DOWN": self.scroll = max(0, self.scroll + 30)
+        elif c == "UP": self.scroll = max(0, self.scroll - s(30))
+        elif c == "DOWN": self.scroll = max(0, self.scroll + s(30))
         elif c == "SELECT":
             self.store.clear()
             self.msgs = [("ai", "Chat cleared.")]
@@ -622,12 +628,13 @@ class App:
         self.scroll = max(0, self._total_h() - self._chat_h())
 
     def _chat_h(self):
-        return (self.kb.y0 - 76) if self.state == "keyboard" else (SCREEN_H - 36)
+        return (self.kb.y0 - s(76)) if self.state == "keyboard" else (SCREEN_H - s(36))
 
     def _total_h(self):
-        h = 8
+        h = s(8)
+        cpl = max(1, int(48 * S))
         for _, t in self.msgs:
-            h += max(1, len(t) // 48 + 1) * 22 + 20
+            h += max(1, len(t) // cpl + 1) * s(22) + s(20)
         return h
 
     def _draw(self):
@@ -635,29 +642,30 @@ class App:
         self.blink = (self.blink + 1) % 60
 
         # Header
-        self.g.rect(0, 0, SCREEN_W, 34, HEADER)
-        self.g.rect(0, 34, SCREEN_W, 1, LINE)
+        self.g.rect(0, 0, SCREEN_W, s(34), HEADER)
+        self.g.rect(0, s(34), SCREEN_W, 1, LINE)
 
         if self.ai.generating:
             dt = int(time.time() - self.t0) if self.t0 else 0
             sp = "|/-\\"[(self.blink // 4) % 4]
             if self.ai.response:
                 self.g.text(f"{sp} {self.ai.toks}tok {self.ai.tps:.1f}t/s {dt}s",
-                            14, 7, color=C_AI)
+                            s(14), s(7), color=C_AI)
             else:
-                self.g.text(f"{sp} thinking... {dt}s", 14, 7, color=C_DIM)
+                self.g.text(f"{sp} thinking... {dt}s", s(14), s(7), color=C_DIM)
         else:
-            self.g.text("SpruceChat", 14, 6, color=C_TEXT)
+            self.g.text("SpruceChat", s(14), s(6), color=C_TEXT)
             if self.state == "chat":
-                self.g.text("A:type  B:quit  SEL:clear", SCREEN_W - 220, 10, font=self.g.f_sm, color=C_DIM)
+                self.g.text("A:type  B:quit  SEL:clear", SCREEN_W - s(220), s(10), font=self.g.f_sm, color=C_DIM)
 
         # Chat area
-        top = 36
+        top = s(36)
         bot = self._chat_h() + top
         self.g.rect(0, top, SCREEN_W, bot - top, CHAT_BG)
 
-        y = top + 8 - self.scroll
-        mw = SCREEN_W - 40
+        y = top + s(8) - self.scroll
+        mw = SCREEN_W - s(40)
+        cpl = max(1, int(48 * S))
 
         for role, txt in self.msgs:
             if y > bot:
@@ -666,8 +674,8 @@ class App:
                 txt = "..."
 
             # Estimate height to skip offscreen
-            est = max(1, len(txt or " ") // 48 + 1) * 22 + 20
-            if y + est < top - 10:
+            est = max(1, len(txt or " ") // cpl + 1) * s(22) + s(20)
+            if y + est < top - s(10):
                 y += est
                 continue
 
@@ -676,21 +684,21 @@ class App:
 
             # Label
             lbl = "you" if role == "user" else "spruce"
-            self.g.text(lbl, 18, y, font=self.g.f_sm, color=C_DIM)
-            y += 15
+            self.g.text(lbl, s(18), y, font=self.g.f_sm, color=C_DIM)
+            y += s(15)
 
             # Bubble + text (render once, use height)
-            self.g.rect(14, y, SCREEN_W - 28, est - 18, bc)
-            _, th = self.g.text(txt or " ", 22, y + 4, color=tc, wrap=mw)
-            y += max(th + 8, est - 18) + 6
+            self.g.rect(s(14), y, SCREEN_W - s(28), est - s(18), bc)
+            _, th = self.g.text(txt or " ", s(22), y + s(4), color=tc, wrap=mw)
+            y += max(th + s(8), est - s(18)) + s(6)
 
         # Input bar
         if self.state == "keyboard":
-            iy = self.kb.y0 - 38
+            iy = self.kb.y0 - s(38)
             self.g.rect(0, iy, SCREEN_W, 1, LINE)
-            self.g.rect(0, iy + 1, SCREEN_W, 36, INPUT_BG)
+            self.g.rect(0, iy + 1, SCREEN_W, s(36), INPUT_BG)
             cur = "_" if self.blink < 30 else " "
-            self.g.text(self.text + cur, 16, iy + 8, color=C_TEXT)
+            self.g.text(self.text + cur, s(16), iy + s(8), color=C_TEXT)
             self.kb.draw(self.g)
 
         self.g.present()
