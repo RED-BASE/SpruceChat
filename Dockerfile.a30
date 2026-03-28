@@ -48,6 +48,20 @@ set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)\n\
 set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)\n\
 ' "$SYSROOT" "$SYSROOT" > /tmp/a30-toolchain.cmake
 
+# Pre-collect runtime libs into a known location using gcc -print-file-name
+# This avoids searching the toolchain at build time (buildroot has wrapper scripts
+# with the same names as the real libs)
+RUN mkdir -p /opt/a30-runtime-libs && \
+    export PATH="/opt/a30/bin:$PATH" && \
+    CC=arm-a30-linux-gnueabihf-gcc && \
+    for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do \
+        real=$($CC -print-file-name="$lib"); \
+        if [ -f "$real" ] && [ "$real" != "$lib" ]; then \
+            cp "$(readlink -f "$real")" "/opt/a30-runtime-libs/$lib"; \
+        fi; \
+    done && \
+    ls -la /opt/a30-runtime-libs/
+
 COPY build-a30.sh /build-a30.sh
 RUN chmod +x /build-a30.sh
 

@@ -47,25 +47,8 @@ for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libm
     fi
 done
 
-# Runtime libs from toolchain (device has glibc 2.23 natively, no need to bundle it)
-# Ask GCC where its own runtime libs are — avoids buildroot wrapper script confusion
-CC=arm-a30-linux-gnueabihf-gcc
-for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
-    real=$($CC -print-file-name="$lib")
-    if [ -f "$real" ] && [ "$real" != "$lib" ]; then
-        echo "Bundling $lib from $real"
-        cp "$(readlink -f "$real")" "$OUTPUT_DIR/lib32/$lib"
-    else
-        echo "WARNING: $lib not found via gcc -print-file-name"
-    fi
-done
-# OpenSSL from sysroot (if present)
-for lib in libssl.so.3 libcrypto.so.3; do
-    if [ -f "$SYSROOT/usr/lib/$lib" ]; then
-        echo "Bundling $lib from $SYSROOT/usr/lib/$lib"
-        cp "$(readlink -f "$SYSROOT/usr/lib/$lib")" "$OUTPUT_DIR/lib32/$lib"
-    fi
-done
+# Runtime libs (pre-collected in Dockerfile to avoid buildroot wrapper confusion)
+cp /opt/a30-runtime-libs/* "$OUTPUT_DIR/lib32/"
 
 chmod +x "$OUTPUT_DIR/llama-server32" "$OUTPUT_DIR/llama-cli32"
 
