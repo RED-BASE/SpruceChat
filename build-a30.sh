@@ -48,21 +48,22 @@ for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libm
 done
 
 # Runtime libs from toolchain (device has glibc 2.23 natively, no need to bundle it)
-# Search entire toolchain, skip symlinks and text scripts (buildroot wrappers)
-for lib in libstdc++.so.6 libgcc_s.so.1 libssl.so.3 libcrypto.so.3 libatomic.so.1; do
-    real=""
-    for candidate in $(find /opt/a30 -name "$lib*" ! -type l 2>/dev/null); do
-        # Skip text files (buildroot wrapper scripts)
-        if head -c4 "$candidate" | grep -q "ELF"; then
-            real="$candidate"
-            break
-        fi
-    done
-    if [ -n "$real" ]; then
+# Ask GCC where its own runtime libs are — avoids buildroot wrapper script confusion
+CC=arm-a30-linux-gnueabihf-gcc
+for lib in libstdc++.so.6 libgcc_s.so.1 libatomic.so.1; do
+    real=$($CC -print-file-name="$lib")
+    if [ -f "$real" ] && [ "$real" != "$lib" ]; then
         echo "Bundling $lib from $real"
-        cp "$real" "$OUTPUT_DIR/lib32/$lib"
+        cp "$(readlink -f "$real")" "$OUTPUT_DIR/lib32/$lib"
     else
-        echo "WARNING: $lib not found in toolchain"
+        echo "WARNING: $lib not found via gcc -print-file-name"
+    fi
+done
+# OpenSSL from sysroot (if present)
+for lib in libssl.so.3 libcrypto.so.3; do
+    if [ -f "$SYSROOT/usr/lib/$lib" ]; then
+        echo "Bundling $lib from $SYSROOT/usr/lib/$lib"
+        cp "$(readlink -f "$SYSROOT/usr/lib/$lib")" "$OUTPUT_DIR/lib32/$lib"
     fi
 done
 
