@@ -31,8 +31,8 @@ cmake -B build \
     -DCMAKE_TOOLCHAIN_FILE=/tmp/aarch64-toolchain.cmake \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DCMAKE_C_FLAGS="-O2 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
-    -DCMAKE_CXX_FLAGS="-O2 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_C_FLAGS="-O3 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_CXX_FLAGS="-O3 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
     -DCMAKE_EXE_LINKER_FLAGS="-Wl,--gc-sections,--strip-all -static-libstdc++ -flto=auto" \
     -DGGML_NATIVE=OFF \
     -DLLAMA_CURL=OFF \

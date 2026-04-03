@@ -22,8 +22,8 @@ cmake -B build \
     -DCMAKE_TOOLCHAIN_FILE=/tmp/a30-toolchain.cmake \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DCMAKE_C_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
-    -DCMAKE_CXX_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O2 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_C_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_CXX_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
     -DCMAKE_EXE_LINKER_FLAGS="-Wl,--gc-sections,--strip-all -static-libstdc++ -flto=auto" \
     -DGGML_NATIVE=OFF \
     -DLLAMA_CURL=OFF \
