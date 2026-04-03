@@ -23,6 +23,7 @@ set(CMAKE_CXX_COMPILER aarch64-linux-gnu-g++)
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)
 set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 EOF
 
 cmake -B build \
@@ -30,7 +31,9 @@ cmake -B build \
     -DCMAKE_TOOLCHAIN_FILE=/tmp/aarch64-toolchain.cmake \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++" \
+    -DCMAKE_C_FLAGS="-O2 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_CXX_FLAGS="-O2 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_EXE_LINKER_FLAGS="-Wl,--gc-sections,--strip-all -static-libstdc++ -flto=auto" \
     -DGGML_NATIVE=OFF \
     -DLLAMA_CURL=OFF \
     -DLLAMA_OPENSSL=OFF \
@@ -44,7 +47,7 @@ mkdir -p "$OUTPUT_DIR/lib"
 # Binaries
 cp build/bin/llama-server "$OUTPUT_DIR/"
 cp build/bin/llama-cli "$OUTPUT_DIR/"
-aarch64-linux-gnu-strip "$OUTPUT_DIR/llama-server" "$OUTPUT_DIR/llama-cli"
+aarch64-linux-gnu-strip -s "$OUTPUT_DIR/llama-server" "$OUTPUT_DIR/llama-cli"
 
 # llama.cpp shared libs only (no glibc — device has ≥2.33)
 for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libmtmd.so.0; do
