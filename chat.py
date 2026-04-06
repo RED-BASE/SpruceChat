@@ -385,10 +385,17 @@ class Keyboard:
                 x = sx + ci * (kw + gap)
                 y = ky + ri * s(31)
                 sel = ri == self.row and ci == self.col
-                g.rect(x, y, kw, s(28), KEY_SEL if sel else KEY_BG)
+                if sel:
+                    bg = KEY_SEL
+                elif key == "SEND":
+                    bg = ACCENT
+                else:
+                    bg = KEY_BG
+                g.rect(x, y, kw, s(28), bg)
                 lw, lh = g.size_text(key, font=g.f_sm)
+                txt_c = (255, 255, 255, 255) if sel or key == "SEND" else KEY_TXT
                 g.text(key, x + (kw - lw) // 2, y + (s(28) - lh) // 2,
-                       font=g.f_sm, color=(255, 255, 255, 255) if sel else KEY_TXT)
+                       font=g.f_sm, color=txt_c)
 
 # ── AI Engine ─────────────────────────────────────────────────────────────────
 
