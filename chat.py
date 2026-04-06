@@ -508,7 +508,6 @@ class App:
         self.scroll = 0
         self.state = "chat"
         self.running = True
-        self.blink = 0
         self.t0 = 0
 
         self._boot()
@@ -718,7 +717,6 @@ class App:
 
     def _draw(self):
         self.g.clear()
-        self.blink = (self.blink + 1) % 60
 
         # Header
         hdr_h = s(34)
@@ -814,7 +812,7 @@ class App:
             iy = self.kb.y0 - s(38)
             self.g.rect(0, iy, SCREEN_W, 1, LINE)
             self.g.rect(0, iy + 1, SCREEN_W, s(36), INPUT_BG)
-            cur = "_" if self.blink < 30 else " "
+            cur = "_" if int(time.time() * 2) % 2 == 0 else " "
             self.g.text(self.text + cur, s(14), iy + s(8), color=C_TEXT)
             self.kb.draw(self.g)
 
