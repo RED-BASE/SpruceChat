@@ -730,7 +730,6 @@ class App:
         baseline = title_y + asc_md
         hint_y = baseline - asc_sm
 
-        self.g.text("SpruceChat", s(14), title_y, color=C_TEXT)
         if self.ai.generating:
             dt = int(time.time() - self.t0) if self.t0 else 0
             sp = "|/-\\"[(self.blink // 4) % 4]
