@@ -280,6 +280,22 @@ class Gfx:
         sdl2.SDL_FreeSurface(sf)
         return tx, w, h
 
+    def measure_wrapped(self, s, font=None, wrap=0):
+        """Return pixel height of wrapped text without keeping a texture."""
+        if not s:
+            return 0
+        font = font or self.f_md
+        c = sdl2.SDL_Color(255, 255, 255, 255)
+        if wrap > 0:
+            sf = sdl2.sdlttf.TTF_RenderUTF8_Blended_Wrapped(font, s.encode('utf-8'), c, int(wrap))
+        else:
+            sf = sdl2.sdlttf.TTF_RenderUTF8_Blended(font, s.encode('utf-8'), c)
+        if not sf:
+            return 0
+        h = sf.contents.h
+        sdl2.SDL_FreeSurface(sf)
+        return h
+
     def blit_prepared(self, tx, x, y, w, h):
         if not tx:
             return
@@ -459,6 +475,9 @@ class App:
         self.kb = Keyboard()
         self.store = Store()
         self.msgs = self.store.display()
+        self._mw = SCREEN_W - s(44)  # bubble wrap width
+        self._heights = []
+        self._resync_heights()
         self.text = ""
         self.scroll = 0
         self.state = "chat"
@@ -472,6 +491,7 @@ class App:
             self.msgs.append(("ai", "[Server not connected. Restart the app to retry.]"))
         elif not self.msgs:
             self.msgs.append(("ai", "Hey! I'm a tiny spruce AI. What's up?"))
+        self._resync_heights()
 
     def _boot(self):
         start = time.time()
@@ -594,6 +614,7 @@ class App:
         elif c == "SELECT":
             self.store.clear()
             self.msgs = [("ai", "Chat cleared.")]
+            self._resync_heights()
             self.scroll = 0
 
     def _kb_input(self, c):
@@ -622,14 +643,17 @@ class App:
         self.text = ""
         self.state = "chat"
         self.msgs.append(("user", t))
+        self._heights.append(self._block_h(t))
         self.store.add("user", t)
         self.msgs.append(("ai", ""))
+        self._heights.append(self._block_h(""))
         self.t0 = time.time()
         self.ai.generate(self.store.prompt(), self._on_tok, self._on_done)
 
     def _on_tok(self, partial):
         if self.msgs and self.msgs[-1][0] == "ai":
             self.msgs[-1] = ("ai", partial)
+            self._update_last_height()
         self.scroll = max(0, self._total_h() - self._chat_h())
 
     def _on_done(self, resp):
@@ -637,18 +661,30 @@ class App:
             self.msgs[-1] = ("ai", resp)
         else:
             self.msgs.append(("ai", resp))
+        self._update_last_height()
         self.store.add("assistant", resp)
         self.scroll = max(0, self._total_h() - self._chat_h())
 
     def _chat_h(self):
         return (self.kb.y0 - s(76)) if self.state == "keyboard" else (SCREEN_H - s(36))
 
+    def _block_h(self, txt):
+        th = self.g.measure_wrapped(txt or " ", wrap=self._mw)
+        return s(15) + (th + s(12)) + s(8)
+
+    def _resync_heights(self):
+        self._heights = [self._block_h(t) for _, t in self.msgs]
+
+    def _update_last_height(self):
+        if self.msgs:
+            h = self._block_h(self.msgs[-1][1])
+            if len(self._heights) == len(self.msgs):
+                self._heights[-1] = h
+            else:
+                self._resync_heights()
+
     def _total_h(self):
-        h = s(8)
-        cpl = max(1, int(48 * S))
-        for _, t in self.msgs:
-            h += max(1, len(t) // cpl + 1) * s(22) + s(20)
-        return h
+        return s(8) + sum(self._heights)
 
     def _draw(self):
         self.g.clear()
