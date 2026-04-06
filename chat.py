@@ -723,21 +723,24 @@ class App:
         baseline = title_y + asc_md
         hint_y = baseline - asc_sm
 
+        self.g.text("SpruceChat", s(14), title_y, color=C_TEXT)
         if self.ai.generating:
             dt = int(time.time() - self.t0) if self.t0 else 0
             sp = "|/-\\"[(self.blink // 4) % 4]
             if self.ai.response:
-                self.g.text(f"{sp} {self.ai.toks}tok {self.ai.tps:.1f}t/s {dt}s",
-                            s(14), title_y, color=C_AI)
+                status = f"{sp} {self.ai.toks}tok {self.ai.tps:.1f}t/s {dt}s"
+                col = C_AI
             else:
-                self.g.text(f"{sp} thinking... {dt}s", s(14), title_y, color=C_DIM)
-        else:
-            self.g.text("SpruceChat", s(14), title_y, color=C_TEXT)
-            if self.state == "chat":
-                hint = "A:type  B:quit  SEL:clear"
-                hw, _ = self.g.size_text(hint, font=self.g.f_sm)
-                self.g.text(hint, SCREEN_W - s(14) - hw, hint_y,
-                            font=self.g.f_sm, color=C_DIM)
+                status = f"{sp} thinking... {dt}s"
+                col = C_DIM
+            sw, _ = self.g.size_text(status, font=self.g.f_sm)
+            self.g.text(status, SCREEN_W - s(14) - sw, hint_y,
+                        font=self.g.f_sm, color=col)
+        elif self.state == "chat":
+            hint = "A:type  B:quit  SEL:clear"
+            hw, _ = self.g.size_text(hint, font=self.g.f_sm)
+            self.g.text(hint, SCREEN_W - s(14) - hw, hint_y,
+                        font=self.g.f_sm, color=C_DIM)
 
         # Chat area
         top = s(36)
