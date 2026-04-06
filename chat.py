@@ -53,6 +53,7 @@ KEY_SEL  = (65, 120, 220, 255)
 KEY_TXT  = (180, 180, 195, 255)
 INPUT_BG = (26, 26, 38, 255)
 ACCENT   = (75, 130, 230, 255)
+C_ERR    = (230, 95, 95, 255)
 
 # Input — read device path and key codes from platform cfg env vars
 EVENT_FMT = 'llHHI'
@@ -774,7 +775,8 @@ class App:
                 txt = "..."
 
             is_user = role == "user"
-            tc = C_USER if is_user else C_AI
+            is_err = not is_user and txt.startswith("[Error") or txt.startswith("[Server")
+            tc = C_USER if is_user else (C_ERR if is_err else C_AI)
             bc = BUB_USER if is_user else BUB_AI
             wrap = self._user_mw if is_user else self._mw
 
