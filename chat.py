@@ -584,7 +584,8 @@ class App:
 
     def _draw_boot(self, mfile, lines, progress, dt, ready):
         self.g.clear()
-        self.g.text("SpruceChat", SCREEN_W // 2 - s(76), s(20), font=self.g.f_lg, color=C_TEXT)
+        tw, _ = self.g.size_text("SpruceChat", font=self.g.f_lg)
+        self.g.text("SpruceChat", (SCREEN_W - tw) // 2, s(20), font=self.g.f_lg, color=C_TEXT)
         self.g.text(mfile, s(24), s(60), font=self.g.f_sm, color=C_DIM)
 
         spin = "|/-\\"[int(dt * 4) % 4]
