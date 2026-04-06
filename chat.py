@@ -670,7 +670,7 @@ class App:
 
     def _block_h(self, txt):
         th = self.g.measure_wrapped(txt or " ", wrap=self._mw)
-        return s(15) + (th + s(12)) + s(8)
+        return s(16) + (th + s(12)) + s(12)
 
     def _resync_heights(self):
         self._heights = [self._block_h(t) for _, t in self.msgs]
@@ -739,12 +739,12 @@ class App:
             # Label
             lbl = "you" if role == "user" else "spruce"
             self.g.text(lbl, s(18), y, font=self.g.f_sm, color=C_DIM)
-            y += s(15)
+            y += s(16)
 
             # Bubble + text
             self.g.rect(s(14), y, SCREEN_W - s(28), bubble_h, bc)
             self.g.blit_prepared(tx, s(22), y + s(6), tw, th)
-            y += bubble_h + s(8)
+            y += bubble_h + s(12)
 
         # Input bar
         if self.state == "keyboard":
