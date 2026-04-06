@@ -500,7 +500,8 @@ class App:
         self.kb = Keyboard()
         self.store = Store()
         self.msgs = self.store.display()
-        self._mw = SCREEN_W - s(44)  # bubble wrap width
+        self._mw = SCREEN_W - s(44)  # AI bubble wrap width (full width minus padding)
+        self._user_mw = int(SCREEN_W * 0.72) - s(16)  # user bubble caps ~72% width
         self._heights = []
         self._resync_heights()
         self.text = ""
@@ -670,10 +671,10 @@ class App:
         self.text = ""
         self.state = "chat"
         self.msgs.append(("user", t))
-        self._heights.append(self._block_h(t))
+        self._heights.append(self._block_h("user", t))
         self.store.add("user", t)
         self.msgs.append(("ai", ""))
-        self._heights.append(self._block_h(""))
+        self._heights.append(self._block_h("ai", ""))
         self.t0 = time.time()
         self.ai.generate(self.store.prompt(), self._on_tok, self._on_done)
 
@@ -695,16 +696,18 @@ class App:
     def _chat_h(self):
         return (self.kb.y0 - s(76)) if self.state == "keyboard" else (SCREEN_H - s(36))
 
-    def _block_h(self, txt):
-        th = self.g.measure_wrapped(txt or " ", wrap=self._mw)
+    def _block_h(self, role, txt):
+        wrap = self._user_mw if role == "user" else self._mw
+        th = self.g.measure_wrapped(txt or " ", wrap=wrap)
         return (th + s(12)) + s(10)
 
     def _resync_heights(self):
-        self._heights = [self._block_h(t) for _, t in self.msgs]
+        self._heights = [self._block_h(r, t) for r, t in self.msgs]
 
     def _update_last_height(self):
         if self.msgs:
-            h = self._block_h(self.msgs[-1][1])
+            r, t = self.msgs[-1]
+            h = self._block_h(r, t)
             if len(self._heights) == len(self.msgs):
                 self._heights[-1] = h
             else:
@@ -754,7 +757,6 @@ class App:
         self.g.rect(0, top, SCREEN_W, bot - top, CHAT_BG)
 
         y = top + s(8) - self.scroll
-        mw = SCREEN_W - s(44)  # wrap width inside bubble
 
         for role, txt in self.msgs:
             if y > bot:
@@ -762,13 +764,15 @@ class App:
             if not txt and role == "ai" and self.ai.generating:
                 txt = "..."
 
-            tc = C_USER if role == "user" else C_AI
-            bc = BUB_USER if role == "user" else BUB_AI
+            is_user = role == "user"
+            tc = C_USER if is_user else C_AI
+            bc = BUB_USER if is_user else BUB_AI
+            wrap = self._user_mw if is_user else self._mw
 
-            # Pre-render text to get true height
-            tx, tw, th = self.g.prepare_text(txt or " ", color=tc, wrap=mw)
+            # Pre-render text to get true pixel size
+            tx, tw, th = self.g.prepare_text(txt or " ", color=tc, wrap=wrap)
             bubble_h = th + s(12)
-            block_h = s(15) + bubble_h + s(8)
+            block_h = bubble_h + s(10)
 
             # Cull fully offscreen
             if y + block_h < top - s(10):
@@ -777,11 +781,21 @@ class App:
                 y += block_h
                 continue
 
-            # Bubble + leading accent stripe + text
-            self.g.rect(s(14), y, SCREEN_W - s(28), bubble_h, bc)
-            self.g.rect(s(14), y, s(3), bubble_h, tc)
-            self.g.blit_prepared(tx, s(22), y + s(6), tw, th)
-            y += bubble_h + s(10)
+            if is_user:
+                bubble_w = max(tw + s(16), s(40))
+                bubble_x = SCREEN_W - s(14) - bubble_w
+                text_x = bubble_x + s(8)
+                stripe_x = bubble_x + bubble_w - s(3)
+            else:
+                bubble_x = s(14)
+                bubble_w = SCREEN_W - s(28)
+                text_x = bubble_x + s(8)
+                stripe_x = bubble_x
+
+            self.g.rect(bubble_x, y, bubble_w, bubble_h, bc)
+            self.g.rect(stripe_x, y, s(3), bubble_h, tc)
+            self.g.blit_prepared(tx, text_x, y + s(6), tw, th)
+            y += block_h
 
         # Input bar
         if self.state == "keyboard":
