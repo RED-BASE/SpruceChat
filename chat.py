@@ -371,9 +371,9 @@ class Keyboard:
     def draw(self, g):
         rows = self.rows
         g.rect(0, self.y0, SCREEN_W, SCREEN_H - self.y0, BG)
-        g.rect(s(16), self.y0, SCREEN_W - s(32), 1, LINE)
+        g.rect(s(14), self.y0, SCREEN_W - s(28), 1, LINE)
         g.text("A:type  B:back  Y:send  X:spc  L1:shift  R1:del",
-               s(16), self.y0 + s(4), font=g.f_sm, color=C_DIM)
+               s(14), self.y0 + s(4), font=g.f_sm, color=C_DIM)
         ky = self.y0 + s(22)
         for ri, row in enumerate(rows):
             bottom = ri == len(rows) - 1
@@ -587,30 +587,30 @@ class App:
         self.g.clear()
         tw, _ = self.g.size_text("SpruceChat", font=self.g.f_lg)
         self.g.text("SpruceChat", (SCREEN_W - tw) // 2, s(20), font=self.g.f_lg, color=C_TEXT)
-        self.g.text(mfile, s(24), s(60), font=self.g.f_sm, color=C_DIM)
+        self.g.text(mfile, s(14), s(60), font=self.g.f_sm, color=C_DIM)
 
         spin = "|/-\\"[int(dt * 4) % 4]
         pct = int(progress * 100)
         st = "ready" if ready else f"{spin} loading {pct}%  {dt:.0f}s"
-        self.g.text(st, s(24), s(80), font=self.g.f_sm, color=C_AI if ready else C_DIM)
+        self.g.text(st, s(14), s(80), font=self.g.f_sm, color=C_AI if ready else C_DIM)
 
         # Progress bar
-        bw = SCREEN_W - s(48)
+        bw = SCREEN_W - s(28)
         bh = s(6)
-        self.g.rect(s(24), s(100), bw, bh, HEADER)
+        self.g.rect(s(14), s(100), bw, bh, HEADER)
         fw = int(bw * min(progress, 1.0))
         if fw > 0:
-            self.g.rect(s(24), s(100), fw, bh, C_AI if ready else ACCENT)
+            self.g.rect(s(14), s(100), fw, bh, C_AI if ready else ACCENT)
 
         # Log
         vis = lines[-16:]
         y = s(116)
         for ln in vis:
-            col = C_AI if ln.startswith("[OK]") else (70, 70, 90, 255)
-            self.g.text(ln, s(20), y, font=self.g.f_sm, color=col)
+            col = C_AI if ln.startswith("[OK]") else C_DIM
+            self.g.text(ln, s(14), y, font=self.g.f_sm, color=col)
             y += s(16)
 
-        self.g.text("B: cancel", s(16), SCREEN_H - s(20), font=self.g.f_sm, color=C_DIM)
+        self.g.text("B: cancel", s(14), SCREEN_H - s(20), font=self.g.f_sm, color=C_DIM)
         self.g.present()
 
     def _input(self):
@@ -770,7 +770,7 @@ class App:
 
             # Label
             lbl = "you" if role == "user" else "spruce"
-            self.g.text(lbl, s(18), y, font=self.g.f_sm, color=C_DIM)
+            self.g.text(lbl, s(14), y, font=self.g.f_sm, color=C_DIM)
             y += s(16)
 
             # Bubble + leading accent stripe + text
@@ -785,7 +785,7 @@ class App:
             self.g.rect(0, iy, SCREEN_W, 1, LINE)
             self.g.rect(0, iy + 1, SCREEN_W, s(36), INPUT_BG)
             cur = "_" if self.blink < 30 else " "
-            self.g.text(self.text + cur, s(16), iy + s(8), color=C_TEXT)
+            self.g.text(self.text + cur, s(14), iy + s(8), color=C_TEXT)
             self.kb.draw(self.g)
 
         self.g.present()
