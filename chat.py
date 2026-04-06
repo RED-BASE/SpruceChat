@@ -256,8 +256,17 @@ class Gfx:
         sdl2.SDL_RenderFillRect(self.r, sdl2.SDL_Rect(int(x), int(y), int(w), int(h)))
 
     def text(self, s, x, y, font=None, color=C_TEXT, wrap=0):
-        if not s:
+        tx, w, h = self.prepare_text(s, font=font, color=color, wrap=wrap)
+        if not tx:
             return 0, 0
+        sdl2.SDL_RenderCopy(self.r, tx, None, sdl2.SDL_Rect(int(x), int(y), w, h))
+        sdl2.SDL_DestroyTexture(tx)
+        return w, h
+
+    def prepare_text(self, s, font=None, color=C_TEXT, wrap=0):
+        """Render text to a texture without blitting. Caller must destroy."""
+        if not s:
+            return None, 0, 0
         font = font or self.f_md
         c = sdl2.SDL_Color(*color)
         if wrap > 0:
@@ -265,13 +274,17 @@ class Gfx:
         else:
             sf = sdl2.sdlttf.TTF_RenderUTF8_Blended(font, s.encode('utf-8'), c)
         if not sf:
-            return 0, 0
+            return None, 0, 0
         tx = sdl2.SDL_CreateTextureFromSurface(self.r, sf)
         w, h = sf.contents.w, sf.contents.h
+        sdl2.SDL_FreeSurface(sf)
+        return tx, w, h
+
+    def blit_prepared(self, tx, x, y, w, h):
+        if not tx:
+            return
         sdl2.SDL_RenderCopy(self.r, tx, None, sdl2.SDL_Rect(int(x), int(y), w, h))
         sdl2.SDL_DestroyTexture(tx)
-        sdl2.SDL_FreeSurface(sf)
-        return w, h
 
     def destroy(self):
         if self.rotated:
@@ -664,8 +677,7 @@ class App:
         self.g.rect(0, top, SCREEN_W, bot - top, CHAT_BG)
 
         y = top + s(8) - self.scroll
-        mw = SCREEN_W - s(40)
-        cpl = max(1, int(48 * S))
+        mw = SCREEN_W - s(44)  # wrap width inside bubble
 
         for role, txt in self.msgs:
             if y > bot:
@@ -673,24 +685,30 @@ class App:
             if not txt and role == "ai" and self.ai.generating:
                 txt = "..."
 
-            # Estimate height to skip offscreen
-            est = max(1, len(txt or " ") // cpl + 1) * s(22) + s(20)
-            if y + est < top - s(10):
-                y += est
-                continue
-
             tc = C_USER if role == "user" else C_AI
             bc = BUB_USER if role == "user" else BUB_AI
+
+            # Pre-render text to get true height
+            tx, tw, th = self.g.prepare_text(txt or " ", color=tc, wrap=mw)
+            bubble_h = th + s(12)
+            block_h = s(15) + bubble_h + s(8)
+
+            # Cull fully offscreen
+            if y + block_h < top - s(10):
+                if tx:
+                    sdl2.SDL_DestroyTexture(tx)
+                y += block_h
+                continue
 
             # Label
             lbl = "you" if role == "user" else "spruce"
             self.g.text(lbl, s(18), y, font=self.g.f_sm, color=C_DIM)
             y += s(15)
 
-            # Bubble + text (render once, use height)
-            self.g.rect(s(14), y, SCREEN_W - s(28), est - s(18), bc)
-            _, th = self.g.text(txt or " ", s(22), y + s(4), color=tc, wrap=mw)
-            y += max(th + s(8), est - s(18)) + s(6)
+            # Bubble + text
+            self.g.rect(s(14), y, SCREEN_W - s(28), bubble_h, bc)
+            self.g.blit_prepared(tx, s(22), y + s(6), tw, th)
+            y += bubble_h + s(8)
 
         # Input bar
         if self.state == "keyboard":
