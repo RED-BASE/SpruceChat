@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """SpruceChat - A local AI chat app for spruceOS"""
 
+import ctypes
 import http.client
 import json
 import os
@@ -279,6 +280,22 @@ class Gfx:
         w, h = sf.contents.w, sf.contents.h
         sdl2.SDL_FreeSurface(sf)
         return tx, w, h
+
+    def size_text(self, s, font=None):
+        """Return (w, h) pixel size of unwrapped text."""
+        if not s:
+            return 0, 0
+        font = font or self.f_md
+        w = ctypes.c_int(0)
+        h = ctypes.c_int(0)
+        sdl2.sdlttf.TTF_SizeUTF8(font, s.encode('utf-8'), ctypes.byref(w), ctypes.byref(h))
+        return w.value, h.value
+
+    def font_ascent(self, font):
+        return sdl2.sdlttf.TTF_FontAscent(font)
+
+    def font_height(self, font):
+        return sdl2.sdlttf.TTF_FontHeight(font)
 
     def measure_wrapped(self, s, font=None, wrap=0):
         """Return pixel height of wrapped text without keeping a texture."""
@@ -691,21 +708,33 @@ class App:
         self.blink = (self.blink + 1) % 60
 
         # Header
-        self.g.rect(0, 0, SCREEN_W, s(34), HEADER)
-        self.g.rect(0, s(34), SCREEN_W, 1, LINE)
+        hdr_h = s(34)
+        self.g.rect(0, 0, SCREEN_W, hdr_h, HEADER)
+        self.g.rect(0, hdr_h, SCREEN_W, 1, LINE)
+
+        # Shared baseline so title (f_md) and hint (f_sm) align
+        fh_md = self.g.font_height(self.g.f_md)
+        asc_md = self.g.font_ascent(self.g.f_md)
+        asc_sm = self.g.font_ascent(self.g.f_sm)
+        title_y = (hdr_h - fh_md) // 2
+        baseline = title_y + asc_md
+        hint_y = baseline - asc_sm
 
         if self.ai.generating:
             dt = int(time.time() - self.t0) if self.t0 else 0
             sp = "|/-\\"[(self.blink // 4) % 4]
             if self.ai.response:
                 self.g.text(f"{sp} {self.ai.toks}tok {self.ai.tps:.1f}t/s {dt}s",
-                            s(14), s(7), color=C_AI)
+                            s(14), title_y, color=C_AI)
             else:
-                self.g.text(f"{sp} thinking... {dt}s", s(14), s(7), color=C_DIM)
+                self.g.text(f"{sp} thinking... {dt}s", s(14), title_y, color=C_DIM)
         else:
-            self.g.text("SpruceChat", s(14), s(6), color=C_TEXT)
+            self.g.text("SpruceChat", s(14), title_y, color=C_TEXT)
             if self.state == "chat":
-                self.g.text("A:type  B:quit  SEL:clear", SCREEN_W - s(220), s(10), font=self.g.f_sm, color=C_DIM)
+                hint = "A:type  B:quit  SEL:clear"
+                hw, _ = self.g.size_text(hint, font=self.g.f_sm)
+                self.g.text(hint, SCREEN_W - s(14) - hw, hint_y,
+                            font=self.g.f_sm, color=C_DIM)
 
         # Chat area
         top = s(36)
