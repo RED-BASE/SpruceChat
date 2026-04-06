@@ -46,8 +46,8 @@ C_USER   = (130, 190, 255, 255)
 C_AI     = (160, 220, 170, 255)
 C_DIM    = (130, 130, 155, 255)
 C_TEXT   = (210, 210, 220, 255)
-BUB_USER = (30, 40, 58, 255)
-BUB_AI   = (28, 38, 32, 255)
+BUB_USER = (38, 52, 78, 255)
+BUB_AI   = (32, 50, 40, 255)
 KEY_BG   = (32, 32, 46, 255)
 KEY_SEL  = (65, 120, 220, 255)
 KEY_TXT  = (180, 180, 195, 255)
@@ -772,8 +772,9 @@ class App:
             self.g.text(lbl, s(18), y, font=self.g.f_sm, color=C_DIM)
             y += s(16)
 
-            # Bubble + text
+            # Bubble + leading accent stripe + text
             self.g.rect(s(14), y, SCREEN_W - s(28), bubble_h, bc)
+            self.g.rect(s(14), y, s(3), bubble_h, tc)
             self.g.blit_prepared(tx, s(22), y + s(6), tw, th)
             y += bubble_h + s(12)
 
