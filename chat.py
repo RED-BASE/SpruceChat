@@ -372,7 +372,7 @@ class Keyboard:
         rows = self.rows
         g.rect(0, self.y0, SCREEN_W, SCREEN_H - self.y0, BG)
         g.rect(s(14), self.y0, SCREEN_W - s(28), 1, LINE)
-        g.text("A:type  B:back  Y:send  X:spc  L1:shift  R1:del",
+        g.text("A·type   B·back   Y·send   X·spc   L1·shift   R1·del",
                s(14), self.y0 + s(4), font=g.f_sm, color=C_DIM)
         ky = self.y0 + s(22)
         for ri, row in enumerate(rows):
