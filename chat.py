@@ -386,7 +386,8 @@ class Keyboard:
                 y = ky + ri * s(31)
                 sel = ri == self.row and ci == self.col
                 g.rect(x, y, kw, s(28), KEY_SEL if sel else KEY_BG)
-                g.text(key, x + kw // 2 - len(key) * s(4), y + s(5),
+                lw, lh = g.size_text(key, font=g.f_sm)
+                g.text(key, x + (kw - lw) // 2, y + (s(28) - lh) // 2,
                        font=g.f_sm, color=(255, 255, 255, 255) if sel else KEY_TXT)
 
 # ── AI Engine ─────────────────────────────────────────────────────────────────
