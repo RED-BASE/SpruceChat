@@ -596,10 +596,11 @@ class App:
 
         # Progress bar
         bw = SCREEN_W - s(48)
-        self.g.rect(s(24), s(102), bw, s(3), HEADER)
+        bh = s(6)
+        self.g.rect(s(24), s(100), bw, bh, HEADER)
         fw = int(bw * min(progress, 1.0))
         if fw > 0:
-            self.g.rect(s(24), s(102), fw, s(3), C_AI if ready else ACCENT)
+            self.g.rect(s(24), s(100), fw, bh, C_AI if ready else ACCENT)
 
         # Log
         vis = lines[-16:]
