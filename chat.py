@@ -735,15 +735,27 @@ class App:
 
         if self.ai.generating:
             dt = int(time.time() - self.t0) if self.t0 else 0
-            sp = "|/-\\"[(self.blink // 4) % 4]
             if self.ai.response:
-                status = f"{sp} {self.ai.toks}tok {self.ai.tps:.1f}t/s {dt}s"
+                status = f"{self.ai.toks}tok  {self.ai.tps:.1f}t/s  {dt}s"
                 col = C_AI
             else:
-                status = f"{sp} thinking... {dt}s"
+                status = f"thinking  {dt}s"
                 col = C_DIM
             sw, _ = self.g.size_text(status, font=self.g.f_sm)
-            self.g.text(status, SCREEN_W - s(14) - sw, hint_y,
+            # Pulsing dots to the left of the status text
+            dot_d = s(5)
+            dot_gap = s(4)
+            dots_w = 3 * dot_d + 2 * dot_gap
+            total_w = dots_w + s(8) + sw
+            base_x = SCREEN_W - s(14) - total_w
+            dots_y = (hdr_h - dot_d) // 2
+            now = time.time()
+            for i in range(3):
+                phase = ((now * 1.6) - i * 0.18) % 1.0
+                a = 0.25 + 0.75 * (1.0 - abs(phase * 2 - 1.0))
+                dc = tuple(int(HEADER[k] + (col[k] - HEADER[k]) * a) for k in range(3)) + (255,)
+                self.g.rect(base_x + i * (dot_d + dot_gap), dots_y, dot_d, dot_d, dc)
+            self.g.text(status, base_x + dots_w + s(8), hint_y,
                         font=self.g.f_sm, color=col)
         elif self.state == "chat":
             hint = "A:type  B:quit  SEL:clear"
