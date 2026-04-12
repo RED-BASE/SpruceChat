@@ -22,9 +22,9 @@ cmake -B build \
     -DCMAKE_TOOLCHAIN_FILE=/tmp/a30-toolchain.cmake \
     -DCMAKE_C_COMPILER_LAUNCHER=ccache \
     -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-    -DCMAKE_C_FLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -O2" \
-    -DCMAKE_CXX_FLAGS="-march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -O2" \
-    -DCMAKE_EXE_LINKER_FLAGS="-static-libstdc++" \
+    -DCMAKE_C_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_CXX_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -O3 -ffunction-sections -fdata-sections -fomit-frame-pointer -flto=auto" \
+    -DCMAKE_EXE_LINKER_FLAGS="-Wl,--gc-sections,--strip-all -static-libstdc++ -flto=auto" \
     -DGGML_NATIVE=OFF \
     -DLLAMA_CURL=OFF \
     -DLLAMA_OPENSSL=OFF \
@@ -38,7 +38,7 @@ mkdir -p "$OUTPUT_DIR/lib32"
 # Binaries (named *32 for multi-arch app layout)
 cp build/bin/llama-server "$OUTPUT_DIR/llama-server32"
 cp build/bin/llama-cli "$OUTPUT_DIR/llama-cli32"
-/opt/a30/bin/arm-a30-linux-gnueabihf-strip "$OUTPUT_DIR/llama-server32" "$OUTPUT_DIR/llama-cli32"
+/opt/a30/bin/arm-a30-linux-gnueabihf-strip -s "$OUTPUT_DIR/llama-server32" "$OUTPUT_DIR/llama-cli32"
 
 # llama.cpp shared libs
 for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libmtmd.so.0; do
