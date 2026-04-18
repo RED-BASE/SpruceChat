@@ -15,14 +15,36 @@ import sdl2.sdlttf
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-SCREEN_W = int(os.environ.get("SCREEN_WIDTH", 640))
-SCREEN_H = int(os.environ.get("SCREEN_HEIGHT", 480))
-SCREEN_ROTATION = int(os.environ.get("SCREEN_ROTATION", 0))
-# Scale factor relative to 640x480 base resolution
-S = SCREEN_W / 640.0
+# Screen dimensions — env vars override detection. Defaults are updated by
+# _detect_screen() below: if SCREEN_WIDTH/HEIGHT aren't set, we query SDL for
+# the real display resolution so the UI fills higher-res screens properly.
+SCREEN_W = 640
+SCREEN_H = 480
+SCREEN_ROTATION = 0
+# Scale factor relative to 640x480 base resolution; updated in lock-step with
+# SCREEN_W so s() always scales against the live dimensions.
+S = 1.0
 def s(v):
     """Scale a pixel value from 640x480 base to actual resolution."""
     return int(v * S)
+
+def _detect_screen():
+    """Resolve SCREEN_W/H/ROTATION/S from env vars, or SDL if env is empty."""
+    global SCREEN_W, SCREEN_H, SCREEN_ROTATION, S
+    env_w = os.environ.get("SCREEN_WIDTH")
+    env_h = os.environ.get("SCREEN_HEIGHT")
+    if env_w and env_h:
+        SCREEN_W, SCREEN_H = int(env_w), int(env_h)
+    else:
+        # SDL_Init is idempotent — Gfx.__init__ can still init normally after.
+        if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO) == 0:
+            mode = sdl2.SDL_DisplayMode()
+            if sdl2.SDL_GetCurrentDisplayMode(0, ctypes.byref(mode)) == 0 and mode.w > 0:
+                SCREEN_W, SCREEN_H = mode.w, mode.h
+    SCREEN_ROTATION = int(os.environ.get("SCREEN_ROTATION", 0))
+    S = SCREEN_W / 640.0
+
+_detect_screen()
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 # Fonts: spruceOS theme → PixelReader fallback → bundled font in the port

@@ -29,11 +29,9 @@ export XDG_DATA_HOME="$CONFDIR"
 export SDL_GAMECONTROLLERCONFIG="$sdl_controllerconfig"
 export SPRUCE_INPUT_MODE="sdl"
 
-# Render at PortMaster's minimum spec; higher-res devices get letterboxing.
-# Later we can detect native res via SDL_GetCurrentDisplayMode.
-export SCREEN_WIDTH="${SCREEN_WIDTH:-640}"
-export SCREEN_HEIGHT="${SCREEN_HEIGHT:-480}"
-export SCREEN_ROTATION="${SCREEN_ROTATION:-0}"
+# chat.py auto-detects screen dimensions via SDL_GetCurrentDisplayMode when
+# SCREEN_WIDTH/SCREEN_HEIGHT aren't set. Export them here only to force a
+# specific resolution (e.g. for debugging on a desktop).
 
 # Bundled Python + SDL2 live inside the port
 export PYTHONHOME="$APPDIR/python"
