@@ -25,11 +25,15 @@ def s(v):
     return int(v * S)
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# Fonts: spruceOS theme → PixelReader fallback → bundled font in the port
 FONT_PATH = "/mnt/SDCARD/Themes/SPRUCE/nunwen.ttf"
 FONT_PATH_FB = "/mnt/SDCARD/App/PixelReader/resources/fonts/DejaVuSans.ttf"
+FONT_PATH_BUNDLED = os.path.join(APP_DIR, "fonts", "DejaVuSans.ttf")
 MODEL_PATH = os.path.join(APP_DIR, "models", "qwen2.5-0.5b-instruct-q4_0.gguf")
 MODEL_PATH_FB = os.path.join(APP_DIR, "models", "qwen2.5-0.5b-instruct-q2_k.gguf")
-SAVES_DIR = "/mnt/SDCARD/Saves/spruce/SpruceChat"
+# Saves: honor $XDG_DATA_HOME when set (PortMaster sets this to $CONFDIR);
+# otherwise use the spruceOS path for backward compatibility.
+SAVES_DIR = os.environ.get("XDG_DATA_HOME") or "/mnt/SDCARD/Saves/spruce/SpruceChat"
 HISTORY_PATH = os.path.join(SAVES_DIR, "chat_history.jsonl")
 SERVER_LOG = os.path.join(APP_DIR, "server.log")
 MAX_HISTORY = 12
@@ -55,7 +59,12 @@ INPUT_BG = (26, 26, 38, 255)
 ACCENT   = (75, 130, 230, 255)
 C_ERR    = (230, 95, 95, 255)
 
-# Input — read device path and key codes from platform cfg env vars
+# Input — two modes:
+#   "raw" (default): read /dev/input/event* directly. Button type/code/value
+#       come from spruceOS platform cfg env vars (B_A, B_B, etc.).
+#   "sdl": use SDL2 GameController events. Used by PortMaster (launch.sh sets
+#       SPRUCE_INPUT_MODE=sdl). No platform cfg needed.
+INPUT_MODE = os.environ.get("SPRUCE_INPUT_MODE", "raw")
 EVENT_FMT = 'llHHI'
 EVENT_SZ = struct.calcsize(EVENT_FMT)
 INPUT_DEV = os.environ.get("EVENT_PATH_READ_INPUTS_SPRUCE", "/dev/input/event3")
@@ -135,13 +144,19 @@ class Store:
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 class Input:
+    """Dispatches to a raw /dev/input or SDL GameController implementation."""
+    def __new__(cls):
+        return (InputSDL() if INPUT_MODE == "sdl" else InputRaw())
+
+
+class InputRaw:
+    """Reads /dev/input/event* with button codes from spruceOS platform cfg."""
     def __init__(self):
         self.events = []
         self.lock = threading.Lock()
         self.running = True
         self.fd = None
-        # Build lookup tables for button matching
-        self._key_map = {}  # (type, code, value) -> button name for EV_KEY
+        self._key_map = {}  # code -> button name for EV_KEY
         self._abs_map = {}  # (code, sign) -> button name for EV_ABS
         for name, btn in [
             ("A", BTN_A), ("B", BTN_B), ("X", BTN_X), ("Y", BTN_Y),
@@ -153,7 +168,6 @@ class Input:
             if t == EV_KEY:
                 self._key_map[c] = name
             elif t == EV_ABS:
-                # v encodes direction: negative = one dir, positive = other
                 sign = -1 if v is not None and v < 0 else 1
                 self._abs_map[(c, sign)] = name
         try:
@@ -198,6 +212,60 @@ class Input:
         if self.fd:
             os.close(self.fd)
 
+
+class InputSDL:
+    """Polls SDL2 GameController events. PortMaster devices expose a gamepad
+    via SDL_GAMECONTROLLERCONFIG set by control.txt, so button mapping is
+    automatic across all supported handhelds."""
+    _BTN = {
+        sdl2.SDL_CONTROLLER_BUTTON_A: "A",
+        sdl2.SDL_CONTROLLER_BUTTON_B: "B",
+        sdl2.SDL_CONTROLLER_BUTTON_X: "X",
+        sdl2.SDL_CONTROLLER_BUTTON_Y: "Y",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_UP: "UP",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_DOWN: "DOWN",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_LEFT: "LEFT",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_RIGHT: "RIGHT",
+        sdl2.SDL_CONTROLLER_BUTTON_LEFTSHOULDER: "L1",
+        sdl2.SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: "R1",
+        sdl2.SDL_CONTROLLER_BUTTON_START: "START",
+        sdl2.SDL_CONTROLLER_BUTTON_BACK: "SELECT",
+        sdl2.SDL_CONTROLLER_BUTTON_GUIDE: "MENU",
+    }
+
+    def __init__(self):
+        self.running = True
+        sdl2.SDL_InitSubSystem(sdl2.SDL_INIT_GAMECONTROLLER)
+        self._pads = []
+        for i in range(sdl2.SDL_NumJoysticks()):
+            if sdl2.SDL_IsGameController(i):
+                p = sdl2.SDL_GameControllerOpen(i)
+                if p:
+                    self._pads.append(p)
+
+    def get(self):
+        events = []
+        ev = sdl2.SDL_Event()
+        while sdl2.SDL_PollEvent(ctypes.byref(ev)) != 0:
+            if ev.type == sdl2.SDL_CONTROLLERBUTTONDOWN:
+                btn = self._BTN.get(ev.cbutton.button)
+                if btn:
+                    events.append(btn)
+            elif ev.type == sdl2.SDL_CONTROLLERDEVICEADDED:
+                i = ev.cdevice.which
+                if sdl2.SDL_IsGameController(i):
+                    p = sdl2.SDL_GameControllerOpen(i)
+                    if p:
+                        self._pads.append(p)
+            elif ev.type == sdl2.SDL_QUIT:
+                events.append("MENU")
+        return events
+
+    def close(self):
+        self.running = False
+        for p in self._pads:
+            sdl2.SDL_GameControllerClose(p)
+
 # ── Graphics ──────────────────────────────────────────────────────────────────
 
 class Gfx:
@@ -224,7 +292,8 @@ class Gfx:
                                                    sdl2.SDL_TEXTUREACCESS_TARGET, SCREEN_H, SCREEN_W)
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
 
-        fp = FONT_PATH if os.path.exists(FONT_PATH) else FONT_PATH_FB
+        fp = next((p for p in (FONT_PATH, FONT_PATH_FB, FONT_PATH_BUNDLED)
+                   if os.path.exists(p)), FONT_PATH_BUNDLED)
         self.f_sm = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(16))
         self.f_md = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(20))
         self.f_lg = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(26))
