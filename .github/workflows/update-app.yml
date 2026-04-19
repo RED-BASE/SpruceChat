@@ -23,10 +23,10 @@ jobs:
           cd /tmp
           unzip -o SpruceChat.zip
           cp ${{ github.workspace }}/chat.py SpruceChat/
-          cp ${{ github.workspace }}/launch.sh SpruceChat/
-          cp ${{ github.workspace }}/config.json SpruceChat/
-          cp ${{ github.workspace }}/icon.png SpruceChat/
           cp ${{ github.workspace }}/README.md SpruceChat/
+          cp ${{ github.workspace }}/platforms/spruceos/launch.sh SpruceChat/
+          cp ${{ github.workspace }}/platforms/spruceos/config.json SpruceChat/
+          cp ${{ github.workspace }}/platforms/spruceos/icon.png SpruceChat/
           rm SpruceChat.zip
           zip -r SpruceChat.zip SpruceChat/
 

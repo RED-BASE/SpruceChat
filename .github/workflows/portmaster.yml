@@ -30,7 +30,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.universal
+          file: platforms/spruceos/Dockerfile.universal
           push: true
           tags: ${{ env.IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.IMAGE }}:cache
@@ -126,9 +126,9 @@ jobs:
           mkdir -p "$INNER/libs.aarch64" "$INNER/python" "$INNER/pysdl2" \
                    "$INNER/models" "$INNER/fonts" "$INNER/licenses"
 
-          cp "portmaster/Spruce Chat.sh" "$PORT/"
-          cp portmaster/port.json portmaster/gameinfo.xml "$INNER/"
-          cp portmaster/README.md "$INNER/" 2>/dev/null || true
+          cp "platforms/portmaster/Spruce Chat.sh" "$PORT/"
+          cp platforms/portmaster/port.json platforms/portmaster/gameinfo.xml "$INNER/"
+          cp platforms/portmaster/README.md "$INNER/" 2>/dev/null || true
           cp screenshot-a30.png "$INNER/screenshot.png"
 
           cp universal/llama-server universal/llama-cli "$INNER/"
@@ -144,7 +144,7 @@ jobs:
           cp chat.py "$INNER/chat.py"
           cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf "$INNER/fonts/"
 
-          cp -r portmaster/spruce_chat/licenses/* "$INNER/licenses/" 2>/dev/null || true
+          cp -r platforms/portmaster/spruce_chat/licenses/* "$INNER/licenses/" 2>/dev/null || true
           for pkg in libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b \
                      libpng16-16 libgraphite2-3 libbrotli1 fonts-dejavu-core; do
               src=$(find sdl-extract/usr/share/doc/"$pkg" -name copyright 2>/dev/null | head -1)

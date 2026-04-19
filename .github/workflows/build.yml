@@ -30,7 +30,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.a30
+          file: platforms/spruceos/Dockerfile.a30
           push: true
           tags: ${{ env.IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.IMAGE }}:cache
@@ -79,7 +79,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.universal
+          file: platforms/spruceos/Dockerfile.universal
           push: true
           tags: ${{ env.IMAGE }}:latest
           cache-from: type=registry,ref=${{ env.IMAGE }}:cache
@@ -157,7 +157,8 @@ jobs:
           cp models/*.gguf SpruceChat/models/
 
           # App files
-          cp chat.py config.json icon.png launch.sh README.md SpruceChat/
+          cp chat.py README.md SpruceChat/
+          cp platforms/spruceos/config.json platforms/spruceos/icon.png platforms/spruceos/launch.sh SpruceChat/
 
           zip -r SpruceChat.zip SpruceChat/
 

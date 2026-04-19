@@ -84,8 +84,8 @@ C_ERR    = (230, 95, 95, 255)
 # Input — two modes:
 #   "raw" (default): read /dev/input/event* directly. Button type/code/value
 #       come from spruceOS platform cfg env vars (B_A, B_B, etc.).
-#   "sdl": use SDL2 GameController events. Used by PortMaster (launch.sh sets
-#       SPRUCE_INPUT_MODE=sdl). No platform cfg needed.
+#   "sdl": use SDL2 GameController events. Used by PortMaster, whose launcher
+#       ("Spruce Chat.sh") sets SPRUCE_INPUT_MODE=sdl. No platform cfg needed.
 INPUT_MODE = os.environ.get("SPRUCE_INPUT_MODE", "raw")
 EVENT_FMT = 'llHHI'
 EVENT_SZ = struct.calcsize(EVENT_FMT)
