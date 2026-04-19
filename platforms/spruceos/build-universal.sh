@@ -12,6 +12,14 @@ fi
 
 cd llama.cpp
 
+# Default-disable llama.cpp's memory-fit preflight. It demands ~1024 MiB
+# free host RAM on start and aborts otherwise, which kills us on 1 GiB
+# devices (e.g. RGB30) even though Qwen2.5-0.5B only uses ~500 MiB. The
+# runtime -fit off / --fit / LLAMA_ARG_FIT=off paths are not honored by
+# our build for reasons we couldn't nail down, so flip the default.
+sed -i -E 's|(\bbool[[:space:]]+fit_params[[:space:]]*=[[:space:]]*)true(\s*;)|\1false\2|' common/common.h
+grep -n 'fit_params' common/common.h | head -3
+
 # Cross-compilation environment
 export CCACHE_DIR="${CCACHE_DIR:-/ccache}"
 
