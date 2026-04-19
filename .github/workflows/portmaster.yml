@@ -130,6 +130,7 @@ jobs:
           cp platforms/portmaster/port.json platforms/portmaster/gameinfo.xml "$INNER/"
           cp platforms/portmaster/README.md "$INNER/" 2>/dev/null || true
           cp screenshot-a30.png "$INNER/screenshot.png"
+          cp screenshot-a30.png "$INNER/cover.png"
 
           cp universal/llama-server universal/llama-cli "$INNER/"
           cp universal/lib/*.so* "$INNER/libs.aarch64/"
