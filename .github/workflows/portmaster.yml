@@ -1,0 +1,155 @@
+name: PortMaster
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ghcr.io/red-base/sprucechat-builder-universal
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.universal
+          push: true
+          tags: ${{ env.IMAGE }}:latest
+          cache-from: type=registry,ref=${{ env.IMAGE }}:cache
+          cache-to: type=registry,ref=${{ env.IMAGE }}:cache,mode=max
+
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: ccache
+          key: ccache-universal-${{ github.sha }}
+          restore-keys: ccache-universal-
+
+      - name: Build llama.cpp (aarch64)
+        run: |
+          mkdir -p universal ccache
+          docker run --rm \
+            -v ${{ github.workspace }}/universal:/output \
+            -v ${{ github.workspace }}/ccache:/ccache \
+            ${{ env.IMAGE }}:latest
+
+      - name: Download model from models release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download models -p "qwen2.5-0.5b-instruct-q4_0.gguf" -D models
+
+      - name: Fetch aarch64 SDL2 + deps (focal / glibc 2.31)
+        run: |
+          sudo dpkg --add-architecture arm64
+          sudo sed -i 's|^deb |deb [arch=amd64] |g' /etc/apt/sources.list
+          sudo sed -i 's|^deb-src |deb-src [arch=amd64] |g' /etc/apt/sources.list || true
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal main universe" | \
+            sudo tee /etc/apt/sources.list.d/arm64-focal.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports focal-updates main universe" | \
+            sudo tee -a /etc/apt/sources.list.d/arm64-focal.list
+          sudo apt-get update -o Acquire::AllowInsecureRepositories=true || true
+          mkdir -p debs
+          cd debs
+          for pkg in libsdl2-2.0-0 libsdl2-ttf-2.0-0 libpng16-16 libfreetype6 \
+                     libharfbuzz0b libgraphite2-3 libbrotli1; do
+            apt-get download "${pkg}:arm64" || true
+          done
+          cd ..
+          mkdir -p sdl-extract
+          for deb in debs/*.deb; do
+            dpkg-deb -x "$deb" sdl-extract/
+          done
+          ls sdl-extract/usr/lib/aarch64-linux-gnu/ | head -40
+
+      - name: Download python-build-standalone (aarch64)
+        run: |
+          PY_TAG="20260414"
+          PY_VER="3.11.15"
+          PY_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PY_TAG}/cpython-${PY_VER}+${PY_TAG}-aarch64-unknown-linux-gnu-install_only_stripped.tar.gz"
+          curl -fL "$PY_URL" -o python.tar.gz
+          mkdir -p python
+          tar -xzf python.tar.gz -C python --strip-components=1
+          rm -rf python/lib/python3.11/test python/lib/python3.11/tkinter \
+                 python/lib/python3.11/idlelib python/lib/python3.11/turtledemo \
+                 python/lib/python3.11/unittest/test python/lib/python3.11/ensurepip \
+                 python/share python/lib/python3.11/__pycache__
+          find python -name __pycache__ -type d -exec rm -rf {} + || true
+
+      - name: Fetch PySDL2 (pure Python)
+        run: |
+          python3 -m pip download --no-deps --no-binary :all: pysdl2 -d pysdl2-src
+          tar -xzf pysdl2-src/*.tar.gz -C pysdl2-src/
+          mkdir -p pysdl2
+          cp -r pysdl2-src/PySDL2-*/sdl2 pysdl2/sdl2
+
+      - name: Install DejaVu font
+        run: sudo apt-get install -y fonts-dejavu-core
+
+      - name: Assemble port
+        run: |
+          PORT="port/spruce_chat"
+          INNER="$PORT/spruce_chat"
+          mkdir -p "$INNER/libs.aarch64" "$INNER/python" "$INNER/pysdl2" \
+                   "$INNER/models" "$INNER/fonts" "$INNER/licenses"
+
+          cp "portmaster/Spruce Chat.sh" "$PORT/"
+          cp portmaster/port.json portmaster/gameinfo.xml "$PORT/"
+          cp portmaster/README.md "$PORT/" 2>/dev/null || true
+          cp screenshot-a30.png "$PORT/screenshot.png"
+
+          cp universal/llama-server universal/llama-cli "$INNER/"
+          cp universal/lib/*.so* "$INNER/libs.aarch64/"
+
+          cp -a sdl-extract/usr/lib/aarch64-linux-gnu/libSDL2-2.0.so* "$INNER/libs.aarch64/" || true
+          cp -a sdl-extract/usr/lib/aarch64-linux-gnu/libSDL2_ttf-2.0.so* "$INNER/libs.aarch64/" || true
+          for lib in libpng16.so libfreetype.so libharfbuzz.so libgraphite2.so libbrotlicommon.so libbrotlidec.so; do
+            cp -a sdl-extract/usr/lib/aarch64-linux-gnu/${lib}* "$INNER/libs.aarch64/" 2>/dev/null || true
+          done
+
+          cp -r python/* "$INNER/python/"
+          cp -r pysdl2/sdl2 "$INNER/pysdl2/"
+          cp chat.py "$INNER/chat.py"
+          cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf "$INNER/fonts/"
+
+          cp -r portmaster/spruce_chat/licenses/* "$INNER/licenses/" 2>/dev/null || true
+          for pkg in libsdl2-2.0-0 libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b \
+                     libpng16-16 libgraphite2-3 libbrotli1 fonts-dejavu-core; do
+              src=$(find sdl-extract/usr/share/doc/"$pkg" -name copyright 2>/dev/null | head -1)
+              [ -z "$src" ] && src="/usr/share/doc/${pkg}/copyright"
+              [ -f "$src" ] && cp "$src" "$INNER/licenses/${pkg}.copyright.txt" || true
+          done
+          [ -f python/LICENSE.txt ] && cp python/LICENSE.txt "$INNER/licenses/Python.PSF.txt" || true
+          find pysdl2-src -iname LICENSE\* -exec cp {} "$INNER/licenses/PySDL2.txt" \; -quit || true
+
+          cp models/*.gguf "$INNER/models/"
+
+          chmod +x "$PORT/Spruce Chat.sh" "$INNER/llama-server" "$INNER/llama-cli" \
+                   "$INNER/python/bin/python3.11"
+
+          cd port && zip -qr ../spruce_chat.zip . && cd ..
+          ls -lh spruce_chat.zip
+          unzip -l spruce_chat.zip | tail -20
+
+      - name: Upload PortMaster artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpruceChat-PortMaster
+          path: spruce_chat.zip
