@@ -98,7 +98,15 @@ jobs:
           python3 -m pip download --no-deps --no-binary :all: pysdl2 -d pysdl2-src
           tar -xzf pysdl2-src/*.tar.gz -C pysdl2-src/
           mkdir -p pysdl2
-          cp -r pysdl2-src/PySDL2-*/sdl2 pysdl2/sdl2
+          # The sdist top-level dir capitalization has changed between versions
+          # (PySDL2-* → pysdl2-*), so locate sdl2/ by searching instead.
+          src=$(find pysdl2-src -maxdepth 2 -type d -name sdl2 | head -1)
+          if [ -z "$src" ]; then
+            echo "PySDL2 source did not contain sdl2/ dir" >&2
+            ls -la pysdl2-src/
+            exit 1
+          fi
+          cp -r "$src" pysdl2/sdl2
 
       - name: Install DejaVu font
         run: sudo apt-get install -y fonts-dejavu-core
