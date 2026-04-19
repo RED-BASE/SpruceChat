@@ -239,16 +239,23 @@ class InputSDL:
     """Polls SDL2 GameController events. PortMaster devices expose a gamepad
     via SDL_GAMECONTROLLERCONFIG set by control.txt, so button mapping is
     automatic across all supported handhelds."""
-    # Face-button label layout varies by CFW. Most PortMaster CFWs (unofficialOS,
-    # ArkOS, etc.) ship a positional SDL_GAMECONTROLLERCONFIG where BUTTON_A is
-    # the south/bottom button — on Nintendo-labeled handhelds that's physically
-    # "B", so we swap to match the printed labels. muOS's controllerconfig is
-    # label-based (physical A → BUTTON_A), so the swap must be skipped.
-    # Launcher sets SPRUCE_SWAP_FACE_BUTTONS=0 for muOS.
-    if os.environ.get("SPRUCE_SWAP_FACE_BUTTONS", "1") == "0":
-        _FACE = {"A": "A", "B": "B", "X": "X", "Y": "Y"}
-    else:
-        _FACE = {"A": "B", "B": "A", "X": "Y", "Y": "X"}
+    # Face-button label layout varies by CFW. Some CFWs ship a positional
+    # SDL_GAMECONTROLLERCONFIG (BUTTON_A = south) — on Nintendo-labeled
+    # handhelds we swap so app output matches the printed labels. Others
+    # ship label-based mappings (physical A → BUTTON_A) where no swap is
+    # correct. A/B and X/Y can even differ within one CFW (unofficialOS
+    # reports A/B positionally but X/Y by label), so the launcher controls
+    # each pair independently via SPRUCE_SWAP_AB and SPRUCE_SWAP_XY.
+    # Legacy SPRUCE_SWAP_FACE_BUTTONS still applies to both if set.
+    _legacy = os.environ.get("SPRUCE_SWAP_FACE_BUTTONS")
+    _swap_ab = os.environ.get("SPRUCE_SWAP_AB", _legacy if _legacy is not None else "1") != "0"
+    _swap_xy = os.environ.get("SPRUCE_SWAP_XY", _legacy if _legacy is not None else "1") != "0"
+    _FACE = {
+        "A": "B" if _swap_ab else "A",
+        "B": "A" if _swap_ab else "B",
+        "X": "Y" if _swap_xy else "X",
+        "Y": "X" if _swap_xy else "Y",
+    }
     _BTN = {
         sdl2.SDL_CONTROLLER_BUTTON_A: _FACE["A"],
         sdl2.SDL_CONTROLLER_BUTTON_B: _FACE["B"],
