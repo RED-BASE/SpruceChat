@@ -239,11 +239,14 @@ class InputSDL:
     """Polls SDL2 GameController events. PortMaster devices expose a gamepad
     via SDL_GAMECONTROLLERCONFIG set by control.txt, so button mapping is
     automatic across all supported handhelds."""
+    # Nintendo-style face button labels (PortMaster handheld convention).
+    # SDL uses Xbox naming where BUTTON_A is the bottom face button; on these
+    # devices the bottom button is physically labeled B and the right is A.
     _BTN = {
-        sdl2.SDL_CONTROLLER_BUTTON_A: "A",
-        sdl2.SDL_CONTROLLER_BUTTON_B: "B",
-        sdl2.SDL_CONTROLLER_BUTTON_X: "X",
-        sdl2.SDL_CONTROLLER_BUTTON_Y: "Y",
+        sdl2.SDL_CONTROLLER_BUTTON_A: "B",  # bottom
+        sdl2.SDL_CONTROLLER_BUTTON_B: "A",  # right
+        sdl2.SDL_CONTROLLER_BUTTON_X: "Y",  # left
+        sdl2.SDL_CONTROLLER_BUTTON_Y: "X",  # top
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_UP: "UP",
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_DOWN: "DOWN",
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_LEFT: "LEFT",
