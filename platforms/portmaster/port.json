@@ -14,12 +14,17 @@
     ],
     "desc": "A tiny AI chat app that runs entirely on-device. Qwen2.5-0.5B via llama.cpp, no internet required. The AI has the personality of a spruce tree: patient, unhurried, quietly amazed by everything.",
     "desc_md": null,
-    "inst": "Ready to Run. First launch assembles the model (~30s) and loads it into RAM (~60s).",
+    "inst": "Ready to Run. First launch loads the model into RAM (~60s).",
     "inst_md": null,
     "genres": [
       "utility"
     ],
-    "image": null,
+    "image": {
+      "screenshot": "screenshot.png",
+      "covers": [],
+      "thumbnail": null,
+      "video": null
+    },
     "rtr": true,
     "exp": false,
     "runtime": [],

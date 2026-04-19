@@ -13,7 +13,7 @@ SpruceChat could be listed on [PortMaster](https://portmaster.games/) — an app
 - [x] **CI workflow** — `.github/workflows/build.yml` has a `portmaster` job that reuses the universal aarch64 build and produces `spruce_chat.zip`
 - [ ] **Trigger CI build** — run the workflow and confirm `SpruceChat-PortMaster` artifact builds cleanly
 - [ ] **Smoke-test on an actual device** — install the zip to a PortMaster-supported aarch64 handheld and confirm it boots + accepts input
-- [ ] **Split model for PR** — chunk the 409MB model into 50MB pieces with `tools/build_data.py` at submission time (launch.sh already handles reassembly)
+- [ ] **Split model for PR** — in the port dir submitted to PortMaster-New, split the ~409MB model into `.part.NN` pieces (≤50MB each, see `tools/build_data.py` `DEFAULT_CHUNK_SIZE`). PortMaster's build pipeline reassembles at release time; no runtime assembly (removed in e988e6d). Our own CI still ships the full file.
 - [ ] **Test on multiple CFWs** — ArkOS, ROCKNIX, muOS, AmberELEC (required for PR acceptance)
 - [ ] **Test at multiple resolutions** — chat.py now auto-detects via `SDL_GetCurrentDisplayMode` when `SCREEN_WIDTH`/`HEIGHT` env vars aren't set. Confirm layout at 480×320, 640×480, 720×720, 1280×720+
 - [ ] **Join PortMaster Discord** — post in `#testing-n-dev` to create a testing thread. PRs without testing docs are rejected
