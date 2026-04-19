@@ -44,14 +44,7 @@ export PATH="$GAMEDIR/python/bin:$PATH"
 # focal's libSDL2 pulls in libXss/libwayland deps not present on most CFWs).
 # pysdl2 still finds our bundled libSDL2_ttf via LD_LIBRARY_PATH above.
 
-# Reassemble the chunked model on first run (PortMaster convention)
-MODEL_DIR="$GAMEDIR/models"
-MODEL="$MODEL_DIR/qwen2.5-0.5b-instruct-q4_0.gguf"
-if [ ! -f "$MODEL" ] && [ -f "$MODEL_DIR/qwen2.5-0.5b-instruct-q4_0.gguf.00" ]; then
-  pm_message "First run: assembling model (one-time, ~30s)..."
-  cat "$MODEL_DIR"/qwen2.5-0.5b-instruct-q4_0.gguf.* > "$MODEL"
-  rm "$MODEL_DIR"/qwen2.5-0.5b-instruct-q4_0.gguf.??
-fi
+MODEL="$GAMEDIR/models/qwen2.5-0.5b-instruct-q4_0.gguf"
 
 # Start llama-server in the background; chat.py shows a loading screen until it's ready
 SERVER_PID=""
