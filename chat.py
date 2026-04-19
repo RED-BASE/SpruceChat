@@ -239,14 +239,21 @@ class InputSDL:
     """Polls SDL2 GameController events. PortMaster devices expose a gamepad
     via SDL_GAMECONTROLLERCONFIG set by control.txt, so button mapping is
     automatic across all supported handhelds."""
-    # Nintendo-style face button labels (PortMaster handheld convention).
-    # SDL uses Xbox naming where BUTTON_A is the bottom face button; on these
-    # devices the bottom button is physically labeled B and the right is A.
+    # Face-button label layout varies by CFW. Most PortMaster CFWs (unofficialOS,
+    # ArkOS, etc.) ship a positional SDL_GAMECONTROLLERCONFIG where BUTTON_A is
+    # the south/bottom button — on Nintendo-labeled handhelds that's physically
+    # "B", so we swap to match the printed labels. muOS's controllerconfig is
+    # label-based (physical A → BUTTON_A), so the swap must be skipped.
+    # Launcher sets SPRUCE_SWAP_FACE_BUTTONS=0 for muOS.
+    if os.environ.get("SPRUCE_SWAP_FACE_BUTTONS", "1") == "0":
+        _FACE = {"A": "A", "B": "B", "X": "X", "Y": "Y"}
+    else:
+        _FACE = {"A": "B", "B": "A", "X": "Y", "Y": "X"}
     _BTN = {
-        sdl2.SDL_CONTROLLER_BUTTON_A: "B",  # bottom
-        sdl2.SDL_CONTROLLER_BUTTON_B: "A",  # right
-        sdl2.SDL_CONTROLLER_BUTTON_X: "Y",  # left
-        sdl2.SDL_CONTROLLER_BUTTON_Y: "X",  # top
+        sdl2.SDL_CONTROLLER_BUTTON_A: _FACE["A"],
+        sdl2.SDL_CONTROLLER_BUTTON_B: _FACE["B"],
+        sdl2.SDL_CONTROLLER_BUTTON_X: _FACE["X"],
+        sdl2.SDL_CONTROLLER_BUTTON_Y: _FACE["Y"],
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_UP: "UP",
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_DOWN: "DOWN",
         sdl2.SDL_CONTROLLER_BUTTON_DPAD_LEFT: "LEFT",
