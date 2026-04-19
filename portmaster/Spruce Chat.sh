@@ -18,7 +18,6 @@ get_controls
 
 GAMEDIR="/$directory/ports/spruce_chat"
 CONFDIR="$GAMEDIR/conf"
-APPDIR="$GAMEDIR/spruce_chat"
 
 mkdir -p "$CONFDIR"
 cd "$GAMEDIR"
@@ -34,17 +33,17 @@ export SPRUCE_INPUT_MODE="sdl"
 # specific resolution (e.g. for debugging on a desktop).
 
 # Bundled Python + SDL2 live inside the port
-export PYTHONHOME="$APPDIR/python"
-export PYTHONPATH="$APPDIR/python/lib/python3.11:$APPDIR/python/lib/python3.11/lib-dynload:$APPDIR/pysdl2"
+export PYTHONHOME="$GAMEDIR/python"
+export PYTHONPATH="$GAMEDIR/python/lib/python3.11:$GAMEDIR/python/lib/python3.11/lib-dynload:$GAMEDIR/pysdl2"
 export PYTHONDONTWRITEBYTECODE=1
-export LD_LIBRARY_PATH="$APPDIR/libs.${DEVICE_ARCH}:$APPDIR/python/lib:$LD_LIBRARY_PATH"
-export PATH="$APPDIR/python/bin:$PATH"
+export LD_LIBRARY_PATH="$GAMEDIR/libs.${DEVICE_ARCH}:$GAMEDIR/python/lib:$LD_LIBRARY_PATH"
+export PATH="$GAMEDIR/python/bin:$PATH"
 
 # SpruceChat uses SDL2 for rendering; pysdl2 finds SDL2 via this var
-export PYSDL2_DLL_PATH="$APPDIR/libs.${DEVICE_ARCH}"
+export PYSDL2_DLL_PATH="$GAMEDIR/libs.${DEVICE_ARCH}"
 
 # Reassemble the chunked model on first run (PortMaster convention)
-MODEL_DIR="$APPDIR/models"
+MODEL_DIR="$GAMEDIR/models"
 MODEL="$MODEL_DIR/qwen2.5-0.5b-instruct-q4_0.gguf"
 if [ ! -f "$MODEL" ] && [ -f "$MODEL_DIR/qwen2.5-0.5b-instruct-q4_0.gguf.00" ]; then
   pm_message "First run: assembling model (one-time, ~30s)..."
@@ -54,21 +53,21 @@ fi
 
 # Start llama-server in the background; chat.py shows a loading screen until it's ready
 SERVER_PID=""
-if [ -x "$APPDIR/llama-server" ] && [ -f "$MODEL" ]; then
-  "$APPDIR/llama-server" \
+if [ -x "$GAMEDIR/llama-server" ] && [ -f "$MODEL" ]; then
+  "$GAMEDIR/llama-server" \
     -m "$MODEL" \
     -c 1024 -t 4 -np 1 -ngl 0 -b 32 \
     --port 8086 --host 0.0.0.0 \
-    > "$APPDIR/server.log" 2>&1 &
+    > "$GAMEDIR/server.log" 2>&1 &
   SERVER_PID=$!
 fi
 
 # gptokeyb with no mapping acts as a process terminator on hotkey+start
 $GPTOKEYB "python3.11" &
 
-pm_platform_helper "$APPDIR/python/bin/python3.11"
+pm_platform_helper "$GAMEDIR/python/bin/python3.11"
 
-"$APPDIR/python/bin/python3.11" "$APPDIR/chat.py"
+"$GAMEDIR/python/bin/python3.11" "$GAMEDIR/chat.py"
 
 if [ -n "$SERVER_PID" ]; then
   kill "$SERVER_PID" 2>/dev/null

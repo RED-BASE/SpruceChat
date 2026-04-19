@@ -113,15 +113,18 @@ jobs:
 
       - name: Assemble port
         run: |
-          PORT="port/spruce_chat"
+          # Zip layout (matches real PortMaster ports):
+          #   <Launch Name>.sh          at zip root
+          #   spruce_chat/              at zip root, holds everything else
+          PORT="port"
           INNER="$PORT/spruce_chat"
           mkdir -p "$INNER/libs.aarch64" "$INNER/python" "$INNER/pysdl2" \
                    "$INNER/models" "$INNER/fonts" "$INNER/licenses"
 
           cp "portmaster/Spruce Chat.sh" "$PORT/"
-          cp portmaster/port.json portmaster/gameinfo.xml "$PORT/"
-          cp portmaster/README.md "$PORT/" 2>/dev/null || true
-          cp screenshot-a30.png "$PORT/screenshot.png"
+          cp portmaster/port.json portmaster/gameinfo.xml "$INNER/"
+          cp portmaster/README.md "$INNER/" 2>/dev/null || true
+          cp screenshot-a30.png "$INNER/screenshot.png"
 
           cp universal/llama-server universal/llama-cli "$INNER/"
           cp universal/lib/*.so* "$INNER/libs.aarch64/"
@@ -154,7 +157,7 @@ jobs:
 
           cd port && zip -qr ../spruce_chat.zip . && cd ..
           ls -lh spruce_chat.zip
-          unzip -l spruce_chat.zip | tail -20
+          unzip -l spruce_chat.zip | head -20
 
       - name: Upload PortMaster artifact
         uses: actions/upload-artifact@v4
