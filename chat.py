@@ -513,13 +513,17 @@ class AI:
         except Exception:
             return False
 
-    def generate(self, msgs, on_tok, on_done):
+    def generate(self, msgs):
         self.generating = True
         self.response = ""
         self.toks = 0
         self.tps = 0.0
         self.t0 = time.time()
-        threading.Thread(target=self._stream, args=(msgs, on_tok, on_done), daemon=True).start()
+        # The stream thread only mutates AI state; the UI polls self.response
+        # from the main loop. Callbacks used to fire per-token from here, but
+        # they reached SDL_ttf (not thread-safe) and eventually corrupted the
+        # allocator — so all SDL work stays on the main thread now.
+        threading.Thread(target=self._stream, args=(msgs,), daemon=True).start()
 
     def _prompt(self, msgs):
         p = ""
@@ -527,7 +531,7 @@ class AI:
             p += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
         return p + "<|im_start|>assistant\n"
 
-    def _stream(self, msgs, on_tok, on_done):
+    def _stream(self, msgs):
         payload = json.dumps({
             "prompt": self._prompt(msgs),
             "n_predict": MAX_TOKENS, "temperature": 0.7, "top_k": 20, "top_p": 0.9,
@@ -563,7 +567,6 @@ class AI:
                             dt = time.time() - first
                             if dt > 0:
                                 self.tps = self.toks / dt
-                            on_tok(self.response)
                         if d.get("stop"):
                             ts = d.get("timings", {})
                             if ts.get("predicted_per_second"):
@@ -577,7 +580,6 @@ class AI:
             self.response = self.response.split(t)[0]
         self.response = self.response.strip()
         self.generating = False
-        on_done(self.response)
 
     def cancel(self):
         self.generating = False
@@ -603,6 +605,8 @@ class App:
         self.state = "chat"
         self.running = True
         self.t0 = 0
+        self._last_seen_response = ""
+        self._was_generating = False
 
         self._boot()
         self.ai = AI()
@@ -769,22 +773,31 @@ class App:
         self.msgs.append(("ai", ""))
         self._heights.append(self._block_h("ai", ""))
         self.t0 = time.time()
-        self.ai.generate(self.store.prompt(), self._on_tok, self._on_done)
+        self._last_seen_response = ""
+        self.ai.generate(self.store.prompt())
 
-    def _on_tok(self, partial):
-        if self.msgs and self.msgs[-1][0] == "ai":
-            self.msgs[-1] = ("ai", partial)
-            self._update_last_height()
-        self.scroll = max(0, self._total_h() - self._chat_h())
+    def _poll_ai(self):
+        """Mirror AI streaming state into the UI on the main thread.
 
-    def _on_done(self, resp):
-        if self.msgs and self.msgs[-1][0] == "ai":
-            self.msgs[-1] = ("ai", resp)
-        else:
-            self.msgs.append(("ai", resp))
-        self._update_last_height()
-        self.store.add("assistant", resp)
-        self.scroll = max(0, self._total_h() - self._chat_h())
+        We used to take callbacks from the streaming thread, but SDL_ttf is
+        not thread-safe and measuring text from the wrong thread eventually
+        corrupted the allocator (`free(): invalid pointer`)."""
+        resp = self.ai.response
+        if resp != self._last_seen_response:
+            self._last_seen_response = resp
+            if self.msgs and self.msgs[-1][0] == "ai":
+                self.msgs[-1] = ("ai", resp)
+                self._update_last_height()
+                self.scroll = max(0, self._total_h() - self._chat_h())
+
+        if self._was_generating and not self.ai.generating:
+            # Generation just finished; persist the final response.
+            if self.msgs and self.msgs[-1][0] == "ai":
+                self.msgs[-1] = ("ai", resp)
+                self._update_last_height()
+            self.store.add("assistant", resp)
+            self.scroll = max(0, self._total_h() - self._chat_h())
+        self._was_generating = self.ai.generating
 
     def _chat_h(self):
         return (self.kb.y0 - s(76)) if self.state == "keyboard" else (SCREEN_H - s(36))
@@ -917,6 +930,7 @@ class App:
         try:
             while self.running:
                 self._input()
+                self._poll_ai()
                 self._draw()
                 time.sleep(0.05)
         finally:
