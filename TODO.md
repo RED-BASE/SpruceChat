@@ -6,12 +6,16 @@ SpruceChat could be listed on [PortMaster](https://portmaster.games/) — an app
 
 ### What needs to happen
 
-- [ ] **Adapt launch script to PortMaster conventions** — source their `control.txt`, use `$GPTOKEYB` for input mapping, call `pm_finish` on exit, use `$GAMEDIR`/`$CONFDIR` instead of hardcoded paths
-- [ ] **Solve Python runtime** — PortMaster doesn't ship Python. Either bundle a minimal Python 3.x runtime, or port the UI to C/SDL2. Bundling a runtime is precedented (KOReader bundles LuaJIT)
-- [ ] **Split model for GitHub** — the 409MB model needs to be chunked into 50MB pieces using PortMaster's `tools/build_data.py`
+- [x] **Adapt launch script to PortMaster conventions** — `portmaster/Spruce Chat.sh`
+- [x] **Solve Python runtime** — bundled via astral-sh/python-build-standalone (aarch64, 3.11, stripped)
+- [x] **Package** — `port.json`, `gameinfo.xml`, README.md, licenses/ written; CI pulls system-lib copyrights
+- [x] **Refactor chat.py for PortMaster** — SDL GameController input path + font fallbacks + `$XDG_DATA_HOME` support (spruceOS behavior preserved)
+- [x] **CI workflow** — `.github/workflows/build.yml` has a `portmaster` job that reuses the universal aarch64 build and produces `spruce_chat.zip`
+- [ ] **Trigger CI build** — run the workflow and confirm `SpruceChat-PortMaster` artifact builds cleanly
+- [ ] **Smoke-test on an actual device** — install the zip to a PortMaster-supported aarch64 handheld and confirm it boots + accepts input
+- [ ] **Split model for PR** — chunk the 409MB model into 50MB pieces with `tools/build_data.py` at submission time (launch.sh already handles reassembly)
 - [ ] **Test on multiple CFWs** — ArkOS, ROCKNIX, muOS, AmberELEC (required for PR acceptance)
-- [ ] **Test at multiple resolutions** — 640x480 (required), 480x320, 720x720, 1280x720 (optional)
-- [ ] **Package** — create `port.json`, `gameinfo.xml`, screenshot (4:3, min 640x480), license files for all deps (llama.cpp MIT, Qwen Apache 2.0)
+- [ ] **Test at multiple resolutions** — chat.py now auto-detects via `SDL_GetCurrentDisplayMode` when `SCREEN_WIDTH`/`HEIGHT` env vars aren't set. Confirm layout at 480×320, 640×480, 720×720, 1280×720+
 - [ ] **Join PortMaster Discord** — post in `#testing-n-dev` to create a testing thread. PRs without testing docs are rejected
 - [ ] **Submit PR** to [PortsMaster/PortMaster-New](https://github.com/PortsMaster/PortMaster-New)
 

@@ -61,7 +61,7 @@ It's not fast. But it streams, so you see each word appear as it thinks. A short
 
 ## How it works
 
-`launch.sh` detects the device platform and starts the appropriate binary (`llama-server` for 64-bit, `llama-server32` for A30). The Python UI connects over localhost HTTP. The model stays in RAM between messages.
+`platforms/spruceos/launch.sh` detects the device platform and starts the appropriate binary (`llama-server` for 64-bit, `llama-server32` for A30). The Python UI connects over localhost HTTP. The model stays in RAM between messages.
 
 The app ships two sets of binaries and libraries:
 - `llama-server` + `lib/` — aarch64 (Flip, Brick, Smart Pro, Smart Pro S)
@@ -79,7 +79,7 @@ The workflow builds both architectures in parallel using Docker:
 
 Both builds use ccache (persisted between runs) and Docker images cached on GHCR.
 
-To build locally, see `Dockerfile.a30` and `Dockerfile.universal` for the build environments, and `build-a30.sh` / `build-universal.sh` for the build scripts.
+To build locally, see `platforms/spruceos/Dockerfile.a30` and `platforms/spruceos/Dockerfile.universal` for the build environments, and the matching `build-a30.sh` / `build-universal.sh` scripts alongside them. PortMaster packaging lives under `platforms/portmaster/`.
 
 ## Author
 

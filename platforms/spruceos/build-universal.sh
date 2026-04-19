@@ -49,8 +49,9 @@ cp build/bin/llama-server "$OUTPUT_DIR/"
 cp build/bin/llama-cli "$OUTPUT_DIR/"
 aarch64-linux-gnu-strip -s "$OUTPUT_DIR/llama-server" "$OUTPUT_DIR/llama-cli"
 
-# llama.cpp shared libs only (no glibc — device has ≥2.33)
-for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 libllama.so.0 libmtmd.so.0; do
+# llama.cpp shared libs (no glibc — device has ≥2.33)
+for soname in libggml-base.so.0 libggml-cpu.so.0 libggml.so.0 \
+              libllama.so.0 libllama-common.so.0 libmtmd.so.0; do
     real=$(find build/bin -name "${soname}*" ! -type l | head -1)
     if [ -n "$real" ]; then
         cp "$real" "$OUTPUT_DIR/lib/$soname"

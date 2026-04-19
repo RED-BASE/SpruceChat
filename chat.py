@@ -15,21 +15,47 @@ import sdl2.sdlttf
 
 # ── Constants ──────────────────────────────────────────────────────────────────
 
-SCREEN_W = int(os.environ.get("SCREEN_WIDTH", 640))
-SCREEN_H = int(os.environ.get("SCREEN_HEIGHT", 480))
-SCREEN_ROTATION = int(os.environ.get("SCREEN_ROTATION", 0))
-# Scale factor relative to 640x480 base resolution
-S = SCREEN_W / 640.0
+# Screen dimensions — env vars override detection. Defaults are updated by
+# _detect_screen() below: if SCREEN_WIDTH/HEIGHT aren't set, we query SDL for
+# the real display resolution so the UI fills higher-res screens properly.
+SCREEN_W = 640
+SCREEN_H = 480
+SCREEN_ROTATION = 0
+# Scale factor relative to 640x480 base resolution; updated in lock-step with
+# SCREEN_W so s() always scales against the live dimensions.
+S = 1.0
 def s(v):
     """Scale a pixel value from 640x480 base to actual resolution."""
     return int(v * S)
 
+def _detect_screen():
+    """Resolve SCREEN_W/H/ROTATION/S from env vars, or SDL if env is empty."""
+    global SCREEN_W, SCREEN_H, SCREEN_ROTATION, S
+    env_w = os.environ.get("SCREEN_WIDTH")
+    env_h = os.environ.get("SCREEN_HEIGHT")
+    if env_w and env_h:
+        SCREEN_W, SCREEN_H = int(env_w), int(env_h)
+    else:
+        # SDL_Init is idempotent — Gfx.__init__ can still init normally after.
+        if sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO) == 0:
+            mode = sdl2.SDL_DisplayMode()
+            if sdl2.SDL_GetCurrentDisplayMode(0, ctypes.byref(mode)) == 0 and mode.w > 0:
+                SCREEN_W, SCREEN_H = mode.w, mode.h
+    SCREEN_ROTATION = int(os.environ.get("SCREEN_ROTATION", 0))
+    S = SCREEN_W / 640.0
+
+_detect_screen()
+
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
+# Fonts: spruceOS theme → PixelReader fallback → bundled font in the port
 FONT_PATH = "/mnt/SDCARD/Themes/SPRUCE/nunwen.ttf"
 FONT_PATH_FB = "/mnt/SDCARD/App/PixelReader/resources/fonts/DejaVuSans.ttf"
+FONT_PATH_BUNDLED = os.path.join(APP_DIR, "fonts", "DejaVuSans.ttf")
 MODEL_PATH = os.path.join(APP_DIR, "models", "qwen2.5-0.5b-instruct-q4_0.gguf")
 MODEL_PATH_FB = os.path.join(APP_DIR, "models", "qwen2.5-0.5b-instruct-q2_k.gguf")
-SAVES_DIR = "/mnt/SDCARD/Saves/spruce/SpruceChat"
+# Saves: honor $XDG_DATA_HOME when set (PortMaster sets this to $CONFDIR);
+# otherwise use the spruceOS path for backward compatibility.
+SAVES_DIR = os.environ.get("XDG_DATA_HOME") or "/mnt/SDCARD/Saves/spruce/SpruceChat"
 HISTORY_PATH = os.path.join(SAVES_DIR, "chat_history.jsonl")
 SERVER_LOG = os.path.join(APP_DIR, "server.log")
 MAX_HISTORY = 12
@@ -55,7 +81,12 @@ INPUT_BG = (26, 26, 38, 255)
 ACCENT   = (75, 130, 230, 255)
 C_ERR    = (230, 95, 95, 255)
 
-# Input — read device path and key codes from platform cfg env vars
+# Input — two modes:
+#   "raw" (default): read /dev/input/event* directly. Button type/code/value
+#       come from spruceOS platform cfg env vars (B_A, B_B, etc.).
+#   "sdl": use SDL2 GameController events. Used by PortMaster, whose launcher
+#       ("Spruce Chat.sh") sets SPRUCE_INPUT_MODE=sdl. No platform cfg needed.
+INPUT_MODE = os.environ.get("SPRUCE_INPUT_MODE", "raw")
 EVENT_FMT = 'llHHI'
 EVENT_SZ = struct.calcsize(EVENT_FMT)
 INPUT_DEV = os.environ.get("EVENT_PATH_READ_INPUTS_SPRUCE", "/dev/input/event3")
@@ -135,13 +166,19 @@ class Store:
 # ── Input ─────────────────────────────────────────────────────────────────────
 
 class Input:
+    """Dispatches to a raw /dev/input or SDL GameController implementation."""
+    def __new__(cls):
+        return (InputSDL() if INPUT_MODE == "sdl" else InputRaw())
+
+
+class InputRaw:
+    """Reads /dev/input/event* with button codes from spruceOS platform cfg."""
     def __init__(self):
         self.events = []
         self.lock = threading.Lock()
         self.running = True
         self.fd = None
-        # Build lookup tables for button matching
-        self._key_map = {}  # (type, code, value) -> button name for EV_KEY
+        self._key_map = {}  # code -> button name for EV_KEY
         self._abs_map = {}  # (code, sign) -> button name for EV_ABS
         for name, btn in [
             ("A", BTN_A), ("B", BTN_B), ("X", BTN_X), ("Y", BTN_Y),
@@ -153,7 +190,6 @@ class Input:
             if t == EV_KEY:
                 self._key_map[c] = name
             elif t == EV_ABS:
-                # v encodes direction: negative = one dir, positive = other
                 sign = -1 if v is not None and v < 0 else 1
                 self._abs_map[(c, sign)] = name
         try:
@@ -198,6 +234,70 @@ class Input:
         if self.fd:
             os.close(self.fd)
 
+
+class InputSDL:
+    """Polls SDL2 GameController events. PortMaster devices expose a gamepad
+    via SDL_GAMECONTROLLERCONFIG set by control.txt, so button mapping is
+    automatic across all supported handhelds."""
+    # Face-button label layout varies by CFW. Most PortMaster CFWs (unofficialOS,
+    # ArkOS, etc.) ship a positional SDL_GAMECONTROLLERCONFIG where BUTTON_A is
+    # the south/bottom button — on Nintendo-labeled handhelds that's physically
+    # "B", so we swap to match the printed labels. muOS's controllerconfig is
+    # label-based (physical A → BUTTON_A), so the swap must be skipped.
+    # Launcher sets SPRUCE_SWAP_FACE_BUTTONS=0 for muOS.
+    if os.environ.get("SPRUCE_SWAP_FACE_BUTTONS", "1") == "0":
+        _FACE = {"A": "A", "B": "B", "X": "X", "Y": "Y"}
+    else:
+        _FACE = {"A": "B", "B": "A", "X": "Y", "Y": "X"}
+    _BTN = {
+        sdl2.SDL_CONTROLLER_BUTTON_A: _FACE["A"],
+        sdl2.SDL_CONTROLLER_BUTTON_B: _FACE["B"],
+        sdl2.SDL_CONTROLLER_BUTTON_X: _FACE["X"],
+        sdl2.SDL_CONTROLLER_BUTTON_Y: _FACE["Y"],
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_UP: "UP",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_DOWN: "DOWN",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_LEFT: "LEFT",
+        sdl2.SDL_CONTROLLER_BUTTON_DPAD_RIGHT: "RIGHT",
+        sdl2.SDL_CONTROLLER_BUTTON_LEFTSHOULDER: "L1",
+        sdl2.SDL_CONTROLLER_BUTTON_RIGHTSHOULDER: "R1",
+        sdl2.SDL_CONTROLLER_BUTTON_START: "START",
+        sdl2.SDL_CONTROLLER_BUTTON_BACK: "SELECT",
+        sdl2.SDL_CONTROLLER_BUTTON_GUIDE: "MENU",
+    }
+
+    def __init__(self):
+        self.running = True
+        sdl2.SDL_InitSubSystem(sdl2.SDL_INIT_GAMECONTROLLER)
+        self._pads = []
+        for i in range(sdl2.SDL_NumJoysticks()):
+            if sdl2.SDL_IsGameController(i):
+                p = sdl2.SDL_GameControllerOpen(i)
+                if p:
+                    self._pads.append(p)
+
+    def get(self):
+        events = []
+        ev = sdl2.SDL_Event()
+        while sdl2.SDL_PollEvent(ctypes.byref(ev)) != 0:
+            if ev.type == sdl2.SDL_CONTROLLERBUTTONDOWN:
+                btn = self._BTN.get(ev.cbutton.button)
+                if btn:
+                    events.append(btn)
+            elif ev.type == sdl2.SDL_CONTROLLERDEVICEADDED:
+                i = ev.cdevice.which
+                if sdl2.SDL_IsGameController(i):
+                    p = sdl2.SDL_GameControllerOpen(i)
+                    if p:
+                        self._pads.append(p)
+            elif ev.type == sdl2.SDL_QUIT:
+                events.append("MENU")
+        return events
+
+    def close(self):
+        self.running = False
+        for p in self._pads:
+            sdl2.SDL_GameControllerClose(p)
+
 # ── Graphics ──────────────────────────────────────────────────────────────────
 
 class Gfx:
@@ -224,7 +324,8 @@ class Gfx:
                                                    sdl2.SDL_TEXTUREACCESS_TARGET, SCREEN_H, SCREEN_W)
         sdl2.SDL_SetRenderTarget(self.r, self.canvas)
 
-        fp = FONT_PATH if os.path.exists(FONT_PATH) else FONT_PATH_FB
+        fp = next((p for p in (FONT_PATH, FONT_PATH_FB, FONT_PATH_BUNDLED)
+                   if os.path.exists(p)), FONT_PATH_BUNDLED)
         self.f_sm = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(16))
         self.f_md = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(20))
         self.f_lg = sdl2.sdlttf.TTF_OpenFont(fp.encode(), s(26))
@@ -419,13 +520,17 @@ class AI:
         except Exception:
             return False
 
-    def generate(self, msgs, on_tok, on_done):
+    def generate(self, msgs):
         self.generating = True
         self.response = ""
         self.toks = 0
         self.tps = 0.0
         self.t0 = time.time()
-        threading.Thread(target=self._stream, args=(msgs, on_tok, on_done), daemon=True).start()
+        # The stream thread only mutates AI state; the UI polls self.response
+        # from the main loop. Callbacks used to fire per-token from here, but
+        # they reached SDL_ttf (not thread-safe) and eventually corrupted the
+        # allocator — so all SDL work stays on the main thread now.
+        threading.Thread(target=self._stream, args=(msgs,), daemon=True).start()
 
     def _prompt(self, msgs):
         p = ""
@@ -433,7 +538,7 @@ class AI:
             p += f"<|im_start|>{m['role']}\n{m['content']}<|im_end|>\n"
         return p + "<|im_start|>assistant\n"
 
-    def _stream(self, msgs, on_tok, on_done):
+    def _stream(self, msgs):
         payload = json.dumps({
             "prompt": self._prompt(msgs),
             "n_predict": MAX_TOKENS, "temperature": 0.7, "top_k": 20, "top_p": 0.9,
@@ -469,7 +574,6 @@ class AI:
                             dt = time.time() - first
                             if dt > 0:
                                 self.tps = self.toks / dt
-                            on_tok(self.response)
                         if d.get("stop"):
                             ts = d.get("timings", {})
                             if ts.get("predicted_per_second"):
@@ -483,7 +587,6 @@ class AI:
             self.response = self.response.split(t)[0]
         self.response = self.response.strip()
         self.generating = False
-        on_done(self.response)
 
     def cancel(self):
         self.generating = False
@@ -509,6 +612,8 @@ class App:
         self.state = "chat"
         self.running = True
         self.t0 = 0
+        self._last_seen_response = ""
+        self._was_generating = False
 
         self._boot()
         self.ai = AI()
@@ -675,22 +780,31 @@ class App:
         self.msgs.append(("ai", ""))
         self._heights.append(self._block_h("ai", ""))
         self.t0 = time.time()
-        self.ai.generate(self.store.prompt(), self._on_tok, self._on_done)
+        self._last_seen_response = ""
+        self.ai.generate(self.store.prompt())
 
-    def _on_tok(self, partial):
-        if self.msgs and self.msgs[-1][0] == "ai":
-            self.msgs[-1] = ("ai", partial)
-            self._update_last_height()
-        self.scroll = max(0, self._total_h() - self._chat_h())
+    def _poll_ai(self):
+        """Mirror AI streaming state into the UI on the main thread.
 
-    def _on_done(self, resp):
-        if self.msgs and self.msgs[-1][0] == "ai":
-            self.msgs[-1] = ("ai", resp)
-        else:
-            self.msgs.append(("ai", resp))
-        self._update_last_height()
-        self.store.add("assistant", resp)
-        self.scroll = max(0, self._total_h() - self._chat_h())
+        We used to take callbacks from the streaming thread, but SDL_ttf is
+        not thread-safe and measuring text from the wrong thread eventually
+        corrupted the allocator (`free(): invalid pointer`)."""
+        resp = self.ai.response
+        if resp != self._last_seen_response:
+            self._last_seen_response = resp
+            if self.msgs and self.msgs[-1][0] == "ai":
+                self.msgs[-1] = ("ai", resp)
+                self._update_last_height()
+                self.scroll = max(0, self._total_h() - self._chat_h())
+
+        if self._was_generating and not self.ai.generating:
+            # Generation just finished; persist the final response.
+            if self.msgs and self.msgs[-1][0] == "ai":
+                self.msgs[-1] = ("ai", resp)
+                self._update_last_height()
+            self.store.add("assistant", resp)
+            self.scroll = max(0, self._total_h() - self._chat_h())
+        self._was_generating = self.ai.generating
 
     def _chat_h(self):
         return (self.kb.y0 - s(76)) if self.state == "keyboard" else (SCREEN_H - s(36))
@@ -823,6 +937,7 @@ class App:
         try:
             while self.running:
                 self._input()
+                self._poll_ai()
                 self._draw()
                 time.sleep(0.05)
         finally:

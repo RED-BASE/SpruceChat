@@ -63,7 +63,7 @@ RUN mkdir -p /opt/a30-runtime-libs && \
     done && \
     ls -la /opt/a30-runtime-libs/
 
-COPY build-a30.sh /build-a30.sh
+COPY platforms/spruceos/build-a30.sh /build-a30.sh
 RUN chmod +x /build-a30.sh
 
 WORKDIR /build

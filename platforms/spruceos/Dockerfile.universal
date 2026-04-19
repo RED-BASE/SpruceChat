@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-aarch64-linux-gnu g++-aarch64-linux-gnu \
     && rm -rf /var/lib/apt/lists/*
 
-COPY build-universal.sh /build-universal.sh
+COPY platforms/spruceos/build-universal.sh /build-universal.sh
 RUN chmod +x /build-universal.sh
 
 WORKDIR /build
