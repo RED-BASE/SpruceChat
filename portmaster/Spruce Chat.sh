@@ -39,8 +39,10 @@ export PYTHONDONTWRITEBYTECODE=1
 export LD_LIBRARY_PATH="$GAMEDIR/libs.${DEVICE_ARCH}:$GAMEDIR/python/lib:$LD_LIBRARY_PATH"
 export PATH="$GAMEDIR/python/bin:$PATH"
 
-# SpruceChat uses SDL2 for rendering; pysdl2 finds SDL2 via this var
-export PYSDL2_DLL_PATH="$GAMEDIR/libs.${DEVICE_ARCH}"
+# Don't set PYSDL2_DLL_PATH: forcing it to libs.aarch64 stops pysdl2 from
+# falling back to the device's system libSDL2 (which we don't bundle, since
+# focal's libSDL2 pulls in libXss/libwayland deps not present on most CFWs).
+# pysdl2 still finds our bundled libSDL2_ttf via LD_LIBRARY_PATH above.
 
 # Reassemble the chunked model on first run (PortMaster convention)
 MODEL_DIR="$GAMEDIR/models"

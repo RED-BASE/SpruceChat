@@ -56,8 +56,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release download models -p "qwen2.5-0.5b-instruct-q4_0.gguf" -D models
 
-      - name: Fetch aarch64 SDL2 + deps (focal / glibc 2.31)
+      - name: Fetch aarch64 SDL2_ttf + deps (focal / glibc 2.31)
         run: |
+          # We rely on the device's system libSDL2 (every PortMaster CFW ships
+          # it, and bundling our own pulls in libXss/libwayland transitive deps
+          # that may be missing on framebuffer-only setups). Bundle only the
+          # libs less reliably present on stock CFWs: SDL2_ttf and its font
+          # stack (freetype/harfbuzz/png/graphite/brotli).
           sudo dpkg --add-architecture arm64
           sudo sed -i 's|^deb |deb [arch=amd64] |g' /etc/apt/sources.list
           sudo sed -i 's|^deb-src |deb-src [arch=amd64] |g' /etc/apt/sources.list || true
@@ -68,7 +73,7 @@ jobs:
           sudo apt-get update -o Acquire::AllowInsecureRepositories=true || true
           mkdir -p debs
           cd debs
-          for pkg in libsdl2-2.0-0 libsdl2-ttf-2.0-0 libpng16-16 libfreetype6 \
+          for pkg in libsdl2-ttf-2.0-0 libpng16-16 libfreetype6 \
                      libharfbuzz0b libgraphite2-3 libbrotli1; do
             apt-get download "${pkg}:arm64" || true
           done
@@ -129,7 +134,6 @@ jobs:
           cp universal/llama-server universal/llama-cli "$INNER/"
           cp universal/lib/*.so* "$INNER/libs.aarch64/"
 
-          cp -a sdl-extract/usr/lib/aarch64-linux-gnu/libSDL2-2.0.so* "$INNER/libs.aarch64/" || true
           cp -a sdl-extract/usr/lib/aarch64-linux-gnu/libSDL2_ttf-2.0.so* "$INNER/libs.aarch64/" || true
           for lib in libpng16.so libfreetype.so libharfbuzz.so libgraphite2.so libbrotlicommon.so libbrotlidec.so; do
             cp -a sdl-extract/usr/lib/aarch64-linux-gnu/${lib}* "$INNER/libs.aarch64/" 2>/dev/null || true
@@ -141,7 +145,7 @@ jobs:
           cp /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf "$INNER/fonts/"
 
           cp -r portmaster/spruce_chat/licenses/* "$INNER/licenses/" 2>/dev/null || true
-          for pkg in libsdl2-2.0-0 libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b \
+          for pkg in libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b \
                      libpng16-16 libgraphite2-3 libbrotli1 fonts-dejavu-core; do
               src=$(find sdl-extract/usr/share/doc/"$pkg" -name copyright 2>/dev/null | head -1)
               [ -z "$src" ] && src="/usr/share/doc/${pkg}/copyright"
